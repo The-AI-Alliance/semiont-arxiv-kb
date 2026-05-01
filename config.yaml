@@ -1,0 +1,32 @@
+# ArXiv Paper Dataset Configuration
+#
+# Research paper from arXiv.org demonstrating:
+# - ArXiv API integration
+# - Paper metadata extraction
+# - Markdown formatting
+# - Single document (no chunking)
+
+name: arxiv
+displayName: Attention Is All You Need
+emoji: 📄
+handler: arxiv
+
+# ArXiv configuration
+dataset: "1706.03762"  # ArXiv ID
+cacheFile: /tmp/arxiv_1706.03762.json
+
+# Processing options
+shouldChunk: false
+
+# Entity types for tagging
+entityTypes:
+  - research-paper
+  - ai
+  - transformers
+  - deep-learning
+
+# Table of Contents
+createTableOfContents: false
+
+# Citation detection
+detectCitations: false
