@@ -7,11 +7,12 @@
 
 import { SemiontClient } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
+import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
 async function main(): Promise<void> {
-  const arxivId = process.argv[2];
-  if (!arxivId) {
-    console.error('Usage: tsx skills/download-paper/script.ts <arxiv-id>');
+  const arxivId = process.argv.find((a) => !a.startsWith('-') && /^\d{4}\./.test(a)) ?? process.argv[2];
+  if (!arxivId || arxivId.startsWith('-')) {
+    console.error('Usage: tsx skills/download-paper/script.ts <arxiv-id> [--interactive]');
     process.exit(1);
   }
 
@@ -28,6 +29,18 @@ async function main(): Promise<void> {
     password: process.env.SEMIONT_USER_PASSWORD!,
   });
 
+  // Tier-3 checkpoint: confirm before yield. Non-interactive mode auto-proceeds.
+  const proceed = await confirm(
+    `About to upload "${paper.title}" as a Resource (text/markdown, ${markdown.length} bytes). Proceed?`,
+    true,
+  );
+  if (!proceed) {
+    console.log('Aborted before upload.');
+    semiont.dispose();
+    closeInteractive();
+    return;
+  }
+
   console.log('Uploading to backend...');
   const { resourceId } = await semiont.yield.resource({
     name: paper.title,
@@ -39,6 +52,7 @@ async function main(): Promise<void> {
 
   console.log(`Created resource: ${resourceId}`);
   semiont.dispose();
+  closeInteractive();
 }
 
 main().catch((e) => {

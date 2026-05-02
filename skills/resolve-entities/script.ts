@@ -17,6 +17,7 @@ import {
   type GatheredContext,
 } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
+import { pick, close as closeInteractive, isInteractive } from '../../src/interactive.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -27,10 +28,15 @@ const ENTITY_TYPES = (
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
 
+// Borderline band around the threshold where interactive disambiguation is most
+// useful. With default MATCH_THRESHOLD=30 this means scores in [15, 45) are
+// surfaced to the user; clearly-above (≥45) auto-bind, clearly-below (<15) skip.
+const BORDERLINE_BAND = 15;
+
 async function main(): Promise<void> {
-  const arxivId = process.argv[2];
-  if (!arxivId) {
-    console.error('Usage: tsx skills/resolve-entities/script.ts <arxiv-id>');
+  const arxivId = process.argv.find((a) => !a.startsWith('-') && /^\d{4}\./.test(a)) ?? process.argv[2];
+  if (!arxivId || arxivId.startsWith('-')) {
+    console.error('Usage: tsx skills/resolve-entities/script.ts <arxiv-id> [--interactive]');
     process.exit(1);
   }
 
@@ -80,22 +86,43 @@ async function main(): Promise<void> {
       limit: 10,
       useSemanticScoring: true,
     });
-    const top = matchResult.response[0];
+    const candidates = matchResult.response;
+    const top = candidates[0];
+    const topScore = top?.score ?? 0;
 
-    if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
-      // Bind — link the annotation to the existing resource
+    let chosen = top && topScore >= MATCH_THRESHOLD ? top : null;
+
+    // Tier-3 checkpoint: borderline scores get user disambiguation.
+    // Clearly-above auto-bind; clearly-below auto-skip; in-between asks.
+    const borderline =
+      isInteractive() &&
+      candidates.length > 0 &&
+      topScore < MATCH_THRESHOLD + BORDERLINE_BAND &&
+      topScore >= MATCH_THRESHOLD - BORDERLINE_BAND;
+
+    if (borderline) {
+      const picked = await pick(
+        `Borderline match for "${text}" (top score ${topScore}, threshold ${MATCH_THRESHOLD}):`,
+        candidates.slice(0, 5),
+        (c) => `${c.name ?? '(unnamed)'} [score ${c.score ?? '?'}, id ${c['@id'] ?? '?'}]`,
+      );
+      chosen = picked ?? null;
+    }
+
+    if (chosen) {
+      // Bind — link the annotation to the chosen resource
       await semiont.bind.body(rId, annId, [
         {
           op: 'add',
           item: {
             type: 'SpecificResource',
-            source: top['@id'],
+            source: chosen['@id'],
             purpose: 'linking',
           },
         },
       ]);
       bound++;
-      console.log(`  bound  "${text}" -> ${top.name} (score ${top.score})`);
+      console.log(`  bound  "${text}" -> ${chosen.name} (score ${chosen.score})`);
     } else {
       stillUnresolved++;
       console.log(`  unresolved  "${text}"`);
@@ -104,6 +131,7 @@ async function main(): Promise<void> {
 
   console.log(`Done. Bound ${bound}, still unresolved ${stillUnresolved}.`);
   semiont.dispose();
+  closeInteractive();
 }
 
 main().catch((e) => {

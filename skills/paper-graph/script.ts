@@ -21,6 +21,12 @@ import {
   type GatheredContext,
 } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
+import {
+  confirm,
+  pick,
+  close as closeInteractive,
+  isInteractive,
+} from '../../src/interactive.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -30,15 +36,16 @@ const ENTITY_TYPES = (
   .map((t) => entityType(t.trim()));
 
 const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD ?? 30);
+const BORDERLINE_BAND = 15;
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 }
 
 async function main(): Promise<void> {
-  const arxivId = process.argv[2];
-  if (!arxivId) {
-    console.error('Usage: tsx skills/paper-graph/script.ts <arxiv-id>');
+  const arxivId = process.argv.find((a) => !a.startsWith('-') && /^\d{4}\./.test(a)) ?? process.argv[2];
+  if (!arxivId || arxivId.startsWith('-')) {
+    console.error('Usage: tsx skills/paper-graph/script.ts <arxiv-id> [--interactive]');
     process.exit(1);
   }
 
@@ -73,8 +80,25 @@ async function main(): Promise<void> {
   );
   console.log(`${unresolved.length} unresolved references to process`);
 
+  // Tier-3 checkpoint: budget gate. With dozens of unresolved refs, this can
+  // mean dozens of yield.fromAnnotation calls (which run inference). Confirm
+  // the scope before committing.
+  if (unresolved.length > 0) {
+    const proceed = await confirm(
+      `Will run gather + match + (bind or yield) per annotation — up to ${unresolved.length} iterations, each making inference calls. Proceed?`,
+      true,
+    );
+    if (!proceed) {
+      console.log('Aborted before resolution loop.');
+      semiont.dispose();
+      closeInteractive();
+      return;
+    }
+  }
+
   let bound = 0;
   let synthesized = 0;
+  let skipped = 0;
 
   for (const ann of unresolved) {
     const annId = annotationId(ann.id);
@@ -89,24 +113,53 @@ async function main(): Promise<void> {
       limit: 10,
       useSemanticScoring: true,
     });
-    const top = matchResult.response[0];
+    const candidates = matchResult.response;
+    const top = candidates[0];
+    const topScore = top?.score ?? 0;
 
-    if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
+    // Tier-3 checkpoint: borderline match disambiguation.
+    let chosen = top && topScore >= MATCH_THRESHOLD ? top : null;
+    const borderline =
+      isInteractive() &&
+      candidates.length > 0 &&
+      topScore < MATCH_THRESHOLD + BORDERLINE_BAND &&
+      topScore >= MATCH_THRESHOLD - BORDERLINE_BAND;
+    if (borderline) {
+      const picked = await pick(
+        `Borderline match for "${text}" (top score ${topScore}, threshold ${MATCH_THRESHOLD}):`,
+        candidates.slice(0, 5),
+        (c) => `${c.name ?? '(unnamed)'} [score ${c.score ?? '?'}, id ${c['@id'] ?? '?'}]`,
+      );
+      chosen = picked ?? null;
+    }
+
+    if (chosen) {
       // Step 3 path — bind to existing
       await semiont.bind.body(rId, annId, [
         {
           op: 'add',
           item: {
             type: 'SpecificResource',
-            source: top['@id'],
+            source: chosen['@id'],
             purpose: 'linking',
           },
         },
       ]);
       bound++;
-      console.log(`  bound       "${text}" -> ${top.name} (score ${top.score})`);
+      console.log(`  bound       "${text}" -> ${chosen.name} (score ${chosen.score})`);
     } else {
-      // Step 4 path — synthesize a new resource and bind
+      // Step 4 path — synthesize a new resource and bind.
+      // Tier-3 checkpoint (interactive only): confirm per-synthesis. Lets the
+      // user steer which entities get stub resources vs. left unresolved.
+      const proceedYield = isInteractive()
+        ? await confirm(`No confident match for "${text}". Synthesize a new resource for it?`, true)
+        : true;
+      if (!proceedYield) {
+        skipped++;
+        console.log(`  skipped     "${text}"`);
+        continue;
+      }
+
       const yieldEvent = await semiont.yield.fromAnnotation(rId, annId, {
         title: text,
         storageUri: `file://generated/${slugify(text)}.md`,
@@ -143,12 +196,13 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `\nDone. ${bound} bound to existing, ${synthesized} synthesized.`,
+    `\nDone. ${bound} bound to existing, ${synthesized} synthesized, ${skipped} skipped.`,
   );
   console.log(
     `Paper-graph rooted at ${rId} with ${bound + synthesized} bound annotations.`,
   );
   semiont.dispose();
+  closeInteractive();
 }
 
 main().catch((e) => {

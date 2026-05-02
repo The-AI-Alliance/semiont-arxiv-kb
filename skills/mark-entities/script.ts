@@ -12,6 +12,7 @@
 
 import { SemiontClient, entityType } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
+import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -21,9 +22,9 @@ const ENTITY_TYPES = (
   .map((t) => entityType(t.trim()));
 
 async function main(): Promise<void> {
-  const arxivId = process.argv[2];
-  if (!arxivId) {
-    console.error('Usage: tsx skills/mark-entities/script.ts <arxiv-id>');
+  const arxivId = process.argv.find((a) => !a.startsWith('-') && /^\d{4}\./.test(a)) ?? process.argv[2];
+  if (!arxivId || arxivId.startsWith('-')) {
+    console.error('Usage: tsx skills/mark-entities/script.ts <arxiv-id> [--interactive]');
     process.exit(1);
   }
 
@@ -38,6 +39,19 @@ async function main(): Promise<void> {
     email: process.env.SEMIONT_USER_EMAIL!,
     password: process.env.SEMIONT_USER_PASSWORD!,
   });
+
+  // Tier-3 checkpoint: confirm parameters before running mark.assist. Lets
+  // the user catch a bad ENTITY_TYPES override before paying for detection.
+  const proceedDetection = await confirm(
+    `About to upload paper and run mark.assist with ${ENTITY_TYPES.length} entity types: [${ENTITY_TYPES.join(', ')}]. Proceed?`,
+    true,
+  );
+  if (!proceedDetection) {
+    console.log('Aborted before detection.');
+    semiont.dispose();
+    closeInteractive();
+    return;
+  }
 
   console.log('Uploading to backend...');
   const { resourceId: rId } = await semiont.yield.resource({
@@ -59,7 +73,23 @@ async function main(): Promise<void> {
     `Created ${progress.progress?.createdCount ?? 0} unresolved references on ${rId}`,
   );
 
+  // Tier-3 informational: surface what was detected so the user can see what
+  // the model produced before deciding whether to proceed with downstream skills.
+  const annotations = await semiont.browse.annotations(rId);
+  const linking = annotations.filter((a) => a.motivation === 'linking');
+  console.log(`\nResource ${rId} now carries ${linking.length} linking annotations.`);
+  if (linking.length > 0) {
+    const sample = linking.slice(0, 10);
+    console.log('Sample (first 10):');
+    for (const ann of sample) {
+      const text = ann.target?.selector?.exact ?? '(no text)';
+      console.log(`  - "${text}"`);
+    }
+    if (linking.length > 10) console.log(`  … and ${linking.length - 10} more.`);
+  }
+
   semiont.dispose();
+  closeInteractive();
 }
 
 main().catch((e) => {

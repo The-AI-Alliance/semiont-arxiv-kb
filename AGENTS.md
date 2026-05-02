@@ -85,9 +85,13 @@ gh codespace ports forward 4000:4000
 
 (If `gh` rejects this with `must have admin rights to Repository`, run `gh auth refresh -h github.com -s codespace` once.)
 
-### Skill env vars
+## Parameterization and interactivity
 
-The skills read three env vars on every invocation:
+Skills are parameterized in three tiers.
+
+### Tier 1 — environment configuration
+
+Set once per environment, rarely changes:
 
 | Var | Purpose |
 |---|---|
@@ -96,6 +100,47 @@ The skills read three env vars on every invocation:
 | `SEMIONT_USER_PASSWORD` | Password for that user |
 
 For local with `start.sh`, that's the email/password you passed to `--email` / `--password`. For Codespaces, those are in `.devcontainer/admin.json`.
+
+### Tier 2 — skill-invocation parameters
+
+Set per skill invocation. Most are env vars; a few are CLI args.
+
+| Skill | Parameter | Default | Purpose |
+|---|---|---|---|
+| `download-paper` | `<arxivId>` (CLI) | required | The paper to fetch |
+| `mark-entities` | `<arxivId>` (CLI) | required | The paper to fetch + mark |
+| | `ENTITY_TYPES` (env) | the seven standard arXiv-paper types | Override or pare down (e.g., `ENTITY_TYPES='Author,CitedPaper'` for a faster bibliography-focused pass) |
+| `resolve-entities` | (above + `MATCH_THRESHOLD`) | 30 | Tune the bind-vs.-leave-unresolved threshold |
+| `paper-graph` | (above + `MATCH_THRESHOLD`) | 30 | Tune the bind-vs.-synthesize threshold |
+
+### Tier 3 — interactive checkpoints
+
+Off by default (batch automation works as before). Enable per-run with `--interactive` (CLI flag) or `SEMIONT_INTERACTIVE=1` (env var). Skills pause at natural decision points and show what they found / what they're about to do, letting the user steer.
+
+The same render-what-found logic runs in non-interactive mode, except the output goes to logs instead of pausing for input — so visibility is preserved without blocking.
+
+| Skill | Checkpoint | What the user sees / chooses |
+|---|---|---|
+| `download-paper` | Before yield | "About to upload paper '[title]' as a Resource. Proceed?" |
+| `mark-entities` | After detection | "X entities across N types. Top by frequency. Proceed / pick types / re-run?" |
+| `resolve-entities` | Per borderline match | Top candidates from the KB with scores; "Bind / pick from list / skip?" |
+| | After run | "Y bound, Z still unresolved. Show summary?" |
+| `paper-graph` | Before bulk yield | "About to synthesize K new resources (M Authors, N CitedPapers, ...). Preview titles / confirm / abort?" |
+| | Per unmatched yield (when interactive) | "About to synthesize stub for '[entity]'. Yield / skip / refine context?" |
+
+### Implementation
+
+A small `src/interactive.ts` module exports helpers used by every skill with a checkpoint:
+
+```typescript
+export async function confirm(prompt: string, default_?: boolean): Promise<boolean>;
+export async function pick<T>(prompt: string, options: T[], render: (t: T) => string): Promise<T | null>;
+export async function preview<T>(prompt: string, items: T[], render: (t: T) => string): Promise<'all' | 'none' | T[]>;
+```
+
+These read `SEMIONT_INTERACTIVE` once at startup; in non-interactive mode they auto-answer with the default and render the preview to log. Container invocations of interactive skills need `-it` (TTY + STDIN); the `HOST_ADDR` discovery probe doesn't.
+
+Tier-2 env vars can pre-answer tier-3 prompts (e.g., `MATCH_THRESHOLD=30` pre-answers borderline-match disambiguation; `ENTITY_TYPES='Author,CitedPaper'` pre-answers the entity-type filter prompt). The "interactive once, scripted thereafter" workflow falls out naturally: a user runs `paper-graph` interactively to discover the right threshold and entity-type subset for a particular paper, then locks them in via env vars for batch runs over a paper collection.
 
 ## Background reading
 
