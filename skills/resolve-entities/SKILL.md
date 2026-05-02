@@ -30,18 +30,17 @@ This skill is the middle of the four arXiv skills. It builds on [`mark-entities`
 The full script lives at [`script.ts`](script.ts). Per-annotation loop body:
 
 ```typescript
-const annId = annotationId(ann.id);
-const gather = await semiont.gather.annotation(annId, rId, { contextWindow: 2000 });
+const gather = await semiont.gather.annotation(ann.id, rId, { contextWindow: 2000 });
 const context = gather.response as GatheredContext;
 
-const matchResult = await semiont.match.search(rId, annId, context, {
+const matchResult = await semiont.match.search(rId, ann.id, context, {
   limit: 10,
   useSemanticScoring: true,
 });
 const top = matchResult.response[0];
 
 if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
-  await semiont.bind.body(rId, annId, [{
+  await semiont.bind.body(rId, ann.id, [{
     op: 'add',
     item: { type: 'SpecificResource', source: top['@id'], purpose: 'linking' },
   }]);

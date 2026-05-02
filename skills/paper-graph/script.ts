@@ -16,7 +16,6 @@
 
 import {
   SemiontClient,
-  annotationId,
   entityType,
   type GatheredContext,
 } from '@semiont/sdk';
@@ -101,15 +100,14 @@ async function main(): Promise<void> {
   let skipped = 0;
 
   for (const ann of unresolved) {
-    const annId = annotationId(ann.id);
     const text = ann.target?.selector?.exact ?? '';
 
-    const gather = await semiont.gather.annotation(annId, rId, {
+    const gather = await semiont.gather.annotation(ann.id, rId, {
       contextWindow: 2000,
     });
     const context = gather.response as GatheredContext;
 
-    const matchResult = await semiont.match.search(rId, annId, context, {
+    const matchResult = await semiont.match.search(rId, ann.id, context, {
       limit: 10,
       useSemanticScoring: true,
     });
@@ -135,7 +133,7 @@ async function main(): Promise<void> {
 
     if (chosen) {
       // Step 3 path — bind to existing
-      await semiont.bind.body(rId, annId, [
+      await semiont.bind.body(rId, ann.id, [
         {
           op: 'add',
           item: {
@@ -160,7 +158,7 @@ async function main(): Promise<void> {
         continue;
       }
 
-      const yieldEvent = await semiont.yield.fromAnnotation(rId, annId, {
+      const yieldEvent = await semiont.yield.fromAnnotation(rId, ann.id, {
         title: text,
         storageUri: `file://generated/${slugify(text)}.md`,
         context,
@@ -180,7 +178,7 @@ async function main(): Promise<void> {
         continue;
       }
 
-      await semiont.bind.body(rId, annId, [
+      await semiont.bind.body(rId, ann.id, [
         {
           op: 'add',
           item: {
