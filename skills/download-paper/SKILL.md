@@ -18,6 +18,7 @@ The result is one new resource in the KB, tagged with the entity type `research-
 
 ## SDK verbs
 
+- `frame.addEntityTypes` — declares this KB's entity-type vocabulary on every run (idempotent). The constant `KB_ENTITY_TYPES` at the top of `script.ts` is the published vocabulary.
 - `yield.resource` — create the new resource
 
 ## Code

@@ -9,7 +9,7 @@ This is an arXiv-flavored Semiont knowledge base. The corpus is research papers 
 
 | Skill | What it does | New SDK verbs |
 |---|---|---|
-| [`download-paper`](skills/download-paper/) | Fetch a paper from arXiv and create one resource | `yield.resource` |
+| [`download-paper`](skills/download-paper/) | Fetch a paper from arXiv, declare the KB's entity-type vocabulary, and create one resource | `frame.addEntityTypes`, `yield.resource` |
 | [`mark-entities`](skills/mark-entities/) | + auto-detect entity references for several entity types | `mark.assist` |
 | [`resolve-entities`](skills/resolve-entities/) | + link each detected reference to an existing KB resource where possible | `gather.annotation`, `match.search`, `bind.body` |
 | [`paper-graph`](skills/paper-graph/) | + generate a new resource for any reference that didn't match — synthesizing a paper-graph around the central paper | `yield.fromAnnotation` |

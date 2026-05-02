@@ -9,6 +9,25 @@ import { SemiontClient } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
+/**
+ * The full entity-type vocabulary this KB uses across all skills. Declared
+ * via `frame.addEntityTypes` once on every download-paper invocation —
+ * idempotent, so re-runs are harmless. Centralizing the list here is what
+ * makes `browse.entityTypes()` return a coherent published vocabulary.
+ */
+const KB_ENTITY_TYPES = [
+  // Resource type for the paper itself
+  'research-paper',
+  // mark.assist entity types used by mark-entities, resolve-entities, paper-graph
+  'Author',
+  'CitedPaper',
+  'Method',
+  'Dataset',
+  'Benchmark',
+  'Concept',
+  'Affiliation',
+];
+
 async function main(): Promise<void> {
   const arxivId = process.argv.find((a) => !a.startsWith('-') && /^\d{4}\./.test(a)) ?? process.argv[2];
   if (!arxivId || arxivId.startsWith('-')) {
@@ -28,6 +47,9 @@ async function main(): Promise<void> {
     email: process.env.SEMIONT_USER_EMAIL!,
     password: process.env.SEMIONT_USER_PASSWORD!,
   });
+
+  // Declare this KB's entity-type vocabulary via frame. Idempotent.
+  await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
 
   // Tier-3 checkpoint: confirm before yield. Non-interactive mode auto-proceeds.
   const proceed = await confirm(
