@@ -14,6 +14,17 @@ Papers are tagged with entity types like `research-paper`, `ai`, `transformers`,
 
 This corpus is well-suited for entity recognition across research authors, methods, datasets, and concepts; building paper citation graphs; tracing the evolution of ideas across the literature; and demonstrating how dense scientific text can be annotated with semantic structure.
 
+## Skills
+
+This repo ships four skills that build a paper-graph KB on top of the Semiont SDK. See [AGENTS.md](AGENTS.md) for the full design discussion.
+
+| Skill | What it does |
+|---|---|
+| [`download-paper`](skills/download-paper/SKILL.md) | Fetch a paper from arXiv and create one resource. |
+| [`mark-entities`](skills/mark-entities/SKILL.md) | Auto-detect entity references — Author, CitedPaper, Method, Dataset, Benchmark, Concept, Affiliation. |
+| [`resolve-entities`](skills/resolve-entities/SKILL.md) | Link each detected reference to an existing KB resource where a confident match is found. |
+| [`paper-graph`](skills/paper-graph/SKILL.md) | Full enrichment pipeline — detect, resolve, then synthesize new resources for unmatched references. |
+
 ## Quick Start
 
 Explore this dataset using [Semiont](https://github.com/The-AI-Alliance/semiont), an open-source knowledge base platform for annotation and knowledge extraction.
@@ -26,9 +37,24 @@ This repo follows the same layout and startup flow as [`semiont-template-kb`](ht
 
 ### Open in Codespaces
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new/The-AI-Alliance/semiont-arxiv-kb)
+Install the [GitHub CLI (`gh`)](https://cli.github.com/) if you haven't already.
 
-> **Before launching:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the backend comes up but inference is non-functional until you add the secret and rebuild the container.
+> **Before creating:** add `ANTHROPIC_API_KEY` as a [user secret](https://github.com/settings/codespaces) with this repo selected. Otherwise the backend comes up but inference is non-functional until you add the secret and rebuild the container.
+
+Create the codespace on a premium machine for faster builds and more headroom:
+
+```bash
+gh codespace create --repo The-AI-Alliance/semiont-arxiv-kb --machine premiumLinux
+```
+
+Forward the backend port to your local machine, then fetch the auto-generated admin credentials:
+
+```bash
+gh codespace ports forward 4000:4000
+gh codespace ssh -- cat .devcontainer/admin.json
+```
+
+The credentials let you log in via the Semiont browser — see [Quick Start: Codespaces](https://github.com/The-AI-Alliance/semiont-template-kb#quick-start-codespaces) on the template-kb README for the full browser-side flow.
 
 ## License
 
