@@ -83,7 +83,17 @@ async function main(): Promise<void> {
     const sample = linking.slice(0, 10);
     console.log('Sample (first 10):');
     for (const ann of sample) {
-      const text = ann.target?.selector?.exact ?? '(no text)';
+      const target = ann.target;
+      const selectors =
+        typeof target === 'string' || !target.selector
+          ? []
+          : Array.isArray(target.selector)
+            ? target.selector
+            : [target.selector];
+      let text = '(no text)';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
+      }
       console.log(`  - "${text}"`);
     }
     if (linking.length > 10) console.log(`  … and ${linking.length - 10} more.`);

@@ -34,7 +34,7 @@ export async function fetchArxivPaper(arxivId: string): Promise<ArxivPaper> {
 
   // Extract the <entry> section (contains the paper data)
   const entryMatch = xml.match(/<entry>([\s\S]*?)<\/entry>/);
-  if (!entryMatch) {
+  if (!entryMatch || !entryMatch[1]) {
     throw new Error('No entry found in arXiv response');
   }
   const entry = entryMatch[1];
@@ -42,15 +42,15 @@ export async function fetchArxivPaper(arxivId: string): Promise<ArxivPaper> {
   // Parse XML from entry (simple regex-based parser for this specific format)
   const extractTag = (tag: string, source: string): string => {
     const match = source.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`));
-    return match ? match[1].trim() : '';
+    return match && match[1] ? match[1].trim() : '';
   };
 
   const extractAllTags = (tag: string, source: string): string[] => {
     const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'g');
-    const matches = [];
+    const matches: string[] = [];
     let match;
     while ((match = regex.exec(source)) !== null) {
-      matches.push(match[1].trim());
+      if (match[1]) matches.push(match[1].trim());
     }
     return matches;
   };

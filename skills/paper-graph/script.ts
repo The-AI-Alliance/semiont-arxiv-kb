@@ -72,11 +72,11 @@ async function main(): Promise<void> {
 
   // Steps 3 + 4 — resolve or synthesize, per annotation
   const annotations = await semiont.browse.annotations(rId);
-  const unresolved = annotations.filter(
-    (ann) =>
-      ann.motivation === 'linking' &&
-      !ann.body?.some((b) => b.type === 'SpecificResource'),
-  );
+  const unresolved = annotations.filter((ann) => {
+    if (ann.motivation !== 'linking') return false;
+    const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+    return !bodies.some((b: any) => b.type === 'SpecificResource');
+  });
   console.log(`${unresolved.length} unresolved references to process`);
 
   // Tier-3 checkpoint: budget gate. With dozens of unresolved refs, this can
@@ -100,11 +100,22 @@ async function main(): Promise<void> {
   let skipped = 0;
 
   for (const ann of unresolved) {
-    const text = ann.target?.selector?.exact ?? '';
+    const target = ann.target;
+    const selectors =
+      typeof target === 'string' || !target.selector
+        ? []
+        : Array.isArray(target.selector)
+          ? target.selector
+          : [target.selector];
+    let text = '';
+    for (const s of selectors) {
+      if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
+    }
 
     const gather = await semiont.gather.annotation(rId, ann.id, {
       contextWindow: 2000,
     });
+    if (!('response' in gather)) continue;
     const context = gather.response as GatheredContext;
 
     const matchResult = await semiont.match.search(rId, ann.id, context, {
