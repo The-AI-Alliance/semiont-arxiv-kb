@@ -13,6 +13,7 @@
 import { SemiontClient, entityType } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -70,7 +71,7 @@ async function main(): Promise<void> {
   });
 
   console.log(
-    `Created ${progress.progress?.createdCount ?? 0} unresolved references on ${rId}`,
+    `Created ${createdCount(progress)} unresolved references on ${rId}`,
   );
 
   // Tier-3 informational: surface what was detected so the user can see what

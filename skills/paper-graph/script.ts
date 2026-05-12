@@ -102,7 +102,7 @@ async function main(): Promise<void> {
   for (const ann of unresolved) {
     const text = ann.target?.selector?.exact ?? '';
 
-    const gather = await semiont.gather.annotation(ann.id, rId, {
+    const gather = await semiont.gather.annotation(rId, ann.id, {
       contextWindow: 2000,
     });
     const context = gather.response as GatheredContext;

@@ -74,7 +74,7 @@ async function main(): Promise<void> {
     const text = ann.target?.selector?.exact ?? '';
 
     // Gather LLM context for this annotation
-    const gather = await semiont.gather.annotation(ann.id, rId, {
+    const gather = await semiont.gather.annotation(rId, ann.id, {
       contextWindow: 2000,
     });
     const context = gather.response as GatheredContext;

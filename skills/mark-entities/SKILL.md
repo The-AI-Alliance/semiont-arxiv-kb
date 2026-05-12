@@ -35,7 +35,9 @@ const ENTITY_TYPES = (
 const progress = await semiont.mark.assist(rId, 'linking', {
   entityTypes: ENTITY_TYPES,
 });
-console.log(`Created ${progress.progress?.createdCount ?? 0} unresolved references`);
+// `createdCount` (from `src/mark-result.ts`) reads the per-motivation
+// result field on the awaited MarkAssistEvent.
+console.log(`Created ${createdCount(progress)} unresolved references`);
 ```
 
 ## Run it
