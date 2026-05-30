@@ -11,7 +11,9 @@
  */
 
 import {
-  SemiontClient,
+  SemiontSession,
+  InMemorySessionStorage,
+  type KnowledgeBase,
   entityType,
   type GatheredContext,
 } from '@semiont/sdk';
@@ -42,11 +44,18 @@ async function main(): Promise<void> {
   const paper = await fetchArxivPaper(arxivId);
   console.log(`Paper: ${paper.title}`);
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'arxiv-resolve-entities',
+    label: 'arxiv resolve-entities',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   const { resourceId: rId } = await semiont.yield.resource({
     name: paper.title,
@@ -139,7 +148,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`Done. Bound ${bound}, still unresolved ${stillUnresolved}.`);
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

@@ -5,7 +5,7 @@
  * Example: tsx skills/download-paper/script.ts 1706.03762
  */
 
-import { SemiontClient } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KnowledgeBase } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 
@@ -42,11 +42,18 @@ async function main(): Promise<void> {
 
   const markdown = formatArxivPaper(paper);
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'arxiv-download-paper',
+    label: 'arxiv download-paper',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   // Declare this KB's entity-type vocabulary via frame. Idempotent.
   await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
@@ -58,7 +65,7 @@ async function main(): Promise<void> {
   );
   if (!proceed) {
     console.log('Aborted before upload.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -73,7 +80,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`Created resource: ${resourceId}`);
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

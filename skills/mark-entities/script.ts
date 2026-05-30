@@ -10,7 +10,7 @@
  * Usage: tsx skills/mark-entities/script.ts <arxiv-id>
  */
 
-import { SemiontClient, entityType } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, entityType } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
@@ -35,11 +35,18 @@ async function main(): Promise<void> {
 
   const markdown = formatArxivPaper(paper);
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'arxiv-mark-entities',
+    label: 'arxiv mark-entities',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   // Tier-3 checkpoint: confirm parameters before running mark.assist. Lets
   // the user catch a bad ENTITY_TYPES override before paying for detection.
@@ -49,7 +56,7 @@ async function main(): Promise<void> {
   );
   if (!proceedDetection) {
     console.log('Aborted before detection.');
-    semiont.dispose();
+    await session.dispose();
     closeInteractive();
     return;
   }
@@ -99,7 +106,7 @@ async function main(): Promise<void> {
     if (linking.length > 10) console.log(`  … and ${linking.length - 10} more.`);
   }
 
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 

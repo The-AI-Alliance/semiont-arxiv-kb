@@ -15,7 +15,9 @@
  */
 
 import {
-  SemiontClient,
+  SemiontSession,
+  InMemorySessionStorage,
+  type KnowledgeBase,
   entityType,
   type GatheredContext,
 } from '@semiont/sdk';
@@ -51,11 +53,18 @@ async function main(): Promise<void> {
   const paper = await fetchArxivPaper(arxivId);
   console.log(`Paper: ${paper.title}`);
 
-  const semiont = await SemiontClient.signInHttp({
-    baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-    email: process.env.SEMIONT_USER_EMAIL!,
-    password: process.env.SEMIONT_USER_PASSWORD!,
-  });
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KnowledgeBase = {
+    id: 'arxiv-paper-graph',
+    label: 'arxiv paper-graph',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   // Step 1 — yield the central paper resource
   const { resourceId: rId } = await semiont.yield.resource({
@@ -89,7 +98,7 @@ async function main(): Promise<void> {
     );
     if (!proceed) {
       console.log('Aborted before resolution loop.');
-      semiont.dispose();
+      await session.dispose();
       closeInteractive();
       return;
     }
@@ -210,7 +219,7 @@ async function main(): Promise<void> {
   console.log(
     `Paper-graph rooted at ${rId} with ${bound + synthesized} bound annotations.`,
   );
-  semiont.dispose();
+  await session.dispose();
   closeInteractive();
 }
 
