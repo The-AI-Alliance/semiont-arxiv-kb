@@ -55,33 +55,35 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  // Declare this KB's entity-type vocabulary via frame. Idempotent.
-  await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
+  try {
+    // Declare this KB's entity-type vocabulary via frame. Idempotent.
+    await semiont.frame.addEntityTypes(KB_ENTITY_TYPES);
 
-  // Tier-3 checkpoint: confirm before yield. Non-interactive mode auto-proceeds.
-  const proceed = await confirm(
-    `About to upload "${paper.title}" as a Resource (text/markdown, ${markdown.length} bytes). Proceed?`,
-    true,
-  );
-  if (!proceed) {
-    console.log('Aborted before upload.');
-    await session.dispose();
+    // Tier-3 checkpoint: confirm before yield. Non-interactive mode auto-proceeds.
+    const proceed = await confirm(
+      `About to upload "${paper.title}" as a Resource (text/markdown, ${markdown.length} bytes). Proceed?`,
+      true,
+    );
+    if (!proceed) {
+      console.log('Aborted before upload.');
+      closeInteractive();
+      return;
+    }
+
+    console.log('Uploading to backend...');
+    const { resourceId } = await semiont.yield.resource({
+      name: paper.title,
+      file: Buffer.from(markdown, 'utf-8'),
+      format: 'text/markdown',
+      entityTypes: ['research-paper'],
+      storageUri: `file://papers/arxiv-${paper.id}.md`,
+    });
+
+    console.log(`Created resource: ${resourceId}`);
     closeInteractive();
-    return;
+  } finally {
+    await session.dispose();
   }
-
-  console.log('Uploading to backend...');
-  const { resourceId } = await semiont.yield.resource({
-    name: paper.title,
-    file: Buffer.from(markdown, 'utf-8'),
-    format: 'text/markdown',
-    entityTypes: ['research-paper'],
-    storageUri: `file://papers/arxiv-${paper.id}.md`,
-  });
-
-  console.log(`Created resource: ${resourceId}`);
-  await session.dispose();
-  closeInteractive();
 }
 
 main().catch((e) => {

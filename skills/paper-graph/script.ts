@@ -66,161 +66,163 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  // Step 1 — yield the central paper resource
-  const { resourceId: rId } = await semiont.yield.resource({
-    name: paper.title,
-    file: Buffer.from(formatArxivPaper(paper), 'utf-8'),
-    format: 'text/markdown',
-    entityTypes: ['research-paper'],
-    storageUri: `file://papers/arxiv-${paper.id}.md`,
-  });
-
-  // Step 2 — mark entity references
-  console.log('Detecting entity references...');
-  await semiont.mark.assist(rId, 'linking', { entityTypes: ENTITY_TYPES });
-
-  // Steps 3 + 4 — resolve or synthesize, per annotation
-  const annotations = await semiont.browse.annotations(rId);
-  const unresolved = annotations.filter((ann) => {
-    if (ann.motivation !== 'linking') return false;
-    const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-    return !bodies.some((b: any) => b.type === 'SpecificResource');
-  });
-  console.log(`${unresolved.length} unresolved references to process`);
-
-  // Tier-3 checkpoint: budget gate. With dozens of unresolved refs, this can
-  // mean dozens of yield.fromAnnotation calls (which run inference). Confirm
-  // the scope before committing.
-  if (unresolved.length > 0) {
-    const proceed = await confirm(
-      `Will run gather + match + (bind or yield) per annotation — up to ${unresolved.length} iterations, each making inference calls. Proceed?`,
-      true,
-    );
-    if (!proceed) {
-      console.log('Aborted before resolution loop.');
-      await session.dispose();
-      closeInteractive();
-      return;
-    }
-  }
-
-  let bound = 0;
-  let synthesized = 0;
-  let skipped = 0;
-
-  for (const ann of unresolved) {
-    const target = ann.target;
-    const selectors =
-      typeof target === 'string' || !target.selector
-        ? []
-        : Array.isArray(target.selector)
-          ? target.selector
-          : [target.selector];
-    let text = '';
-    for (const s of selectors) {
-      if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
-    }
-
-    const gather = await semiont.gather.annotation(rId, ann.id, {
-      contextWindow: 2000,
+  try {
+    // Step 1 — yield the central paper resource
+    const { resourceId: rId } = await semiont.yield.resource({
+      name: paper.title,
+      file: Buffer.from(formatArxivPaper(paper), 'utf-8'),
+      format: 'text/markdown',
+      entityTypes: ['research-paper'],
+      storageUri: `file://papers/arxiv-${paper.id}.md`,
     });
-    if (!('response' in gather)) continue;
-    const context = gather.response as GatheredContext;
 
-    const matchResult = await semiont.match.search(rId, ann.id, context, {
-      limit: 10,
-      useSemanticScoring: true,
+    // Step 2 — mark entity references
+    console.log('Detecting entity references...');
+    await semiont.mark.assist(rId, 'linking', { entityTypes: ENTITY_TYPES });
+
+    // Steps 3 + 4 — resolve or synthesize, per annotation
+    const annotations = await semiont.browse.annotations(rId);
+    const unresolved = annotations.filter((ann) => {
+      if (ann.motivation !== 'linking') return false;
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      return !bodies.some((b: any) => b.type === 'SpecificResource');
     });
-    const candidates = matchResult.response;
-    const top = candidates[0];
-    const topScore = top?.score ?? 0;
+    console.log(`${unresolved.length} unresolved references to process`);
 
-    // Tier-3 checkpoint: borderline match disambiguation.
-    let chosen = top && topScore >= MATCH_THRESHOLD ? top : null;
-    const borderline =
-      isInteractive() &&
-      candidates.length > 0 &&
-      topScore < MATCH_THRESHOLD + BORDERLINE_BAND &&
-      topScore >= MATCH_THRESHOLD - BORDERLINE_BAND;
-    if (borderline) {
-      const picked = await pick(
-        `Borderline match for "${text}" (top score ${topScore}, threshold ${MATCH_THRESHOLD}):`,
-        candidates.slice(0, 5),
-        (c) => `${c.name ?? '(unnamed)'} [score ${c.score ?? '?'}, id ${c['@id'] ?? '?'}]`,
+    // Tier-3 checkpoint: budget gate. With dozens of unresolved refs, this can
+    // mean dozens of yield.fromAnnotation calls (which run inference). Confirm
+    // the scope before committing.
+    if (unresolved.length > 0) {
+      const proceed = await confirm(
+        `Will run gather + match + (bind or yield) per annotation — up to ${unresolved.length} iterations, each making inference calls. Proceed?`,
+        true,
       );
-      chosen = picked ?? null;
+      if (!proceed) {
+        console.log('Aborted before resolution loop.');
+        closeInteractive();
+        return;
+      }
     }
 
-    if (chosen) {
-      // Step 3 path — bind to existing
-      await semiont.bind.body(rId, ann.id, [
-        {
-          op: 'add',
-          item: {
-            type: 'SpecificResource',
-            source: chosen['@id'],
-            purpose: 'linking',
-          },
-        },
-      ]);
-      bound++;
-      console.log(`  bound       "${text}" -> ${chosen.name} (score ${chosen.score})`);
-    } else {
-      // Step 4 path — synthesize a new resource and bind.
-      // Tier-3 checkpoint (interactive only): confirm per-synthesis. Lets the
-      // user steer which entities get stub resources vs. left unresolved.
-      const proceedYield = isInteractive()
-        ? await confirm(`No confident match for "${text}". Synthesize a new resource for it?`, true)
-        : true;
-      if (!proceedYield) {
-        skipped++;
-        console.log(`  skipped     "${text}"`);
-        continue;
+    let bound = 0;
+    let synthesized = 0;
+    let skipped = 0;
+
+    for (const ann of unresolved) {
+      const target = ann.target;
+      const selectors =
+        typeof target === 'string' || !target.selector
+          ? []
+          : Array.isArray(target.selector)
+            ? target.selector
+            : [target.selector];
+      let text = '';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
       }
 
-      const yieldEvent = await semiont.yield.fromAnnotation(rId, ann.id, {
-        title: text,
-        storageUri: `file://generated/${slugify(text)}.md`,
-        context,
+      const gather = await semiont.gather.annotation(rId, ann.id, {
+        contextWindow: 2000,
       });
+      if (!('response' in gather)) continue;
+      const context = gather.response as GatheredContext;
 
-      // The final emission of yield.fromAnnotation is { kind: 'complete', data: JobCompleteCommand }
-      // where data.result is a JobGenerationResult carrying the new resourceId.
-      if (yieldEvent.kind !== 'complete') {
-        console.warn(`  unexpected yield event kind for "${text}": ${yieldEvent.kind}`);
-        continue;
-      }
-      const newResourceId = (
-        yieldEvent.data.result as { resourceId?: string } | undefined
-      )?.resourceId;
-      if (!newResourceId) {
-        console.warn(`  yield.fromAnnotation gave no resourceId for "${text}"`);
-        continue;
+      const matchResult = await semiont.match.search(rId, ann.id, context, {
+        limit: 10,
+        useSemanticScoring: true,
+      });
+      const candidates = matchResult.response;
+      const top = candidates[0];
+      const topScore = top?.score ?? 0;
+
+      // Tier-3 checkpoint: borderline match disambiguation.
+      let chosen = top && topScore >= MATCH_THRESHOLD ? top : null;
+      const borderline =
+        isInteractive() &&
+        candidates.length > 0 &&
+        topScore < MATCH_THRESHOLD + BORDERLINE_BAND &&
+        topScore >= MATCH_THRESHOLD - BORDERLINE_BAND;
+      if (borderline) {
+        const picked = await pick(
+          `Borderline match for "${text}" (top score ${topScore}, threshold ${MATCH_THRESHOLD}):`,
+          candidates.slice(0, 5),
+          (c) => `${c.name ?? '(unnamed)'} [score ${c.score ?? '?'}, id ${c['@id'] ?? '?'}]`,
+        );
+        chosen = picked ?? null;
       }
 
-      await semiont.bind.body(rId, ann.id, [
-        {
-          op: 'add',
-          item: {
-            type: 'SpecificResource',
-            source: newResourceId,
-            purpose: 'linking',
+      if (chosen) {
+        // Step 3 path — bind to existing
+        await semiont.bind.body(rId, ann.id, [
+          {
+            op: 'add',
+            item: {
+              type: 'SpecificResource',
+              source: chosen['@id'],
+              purpose: 'linking',
+            },
           },
-        },
-      ]);
-      synthesized++;
-      console.log(`  synthesized "${text}" -> ${newResourceId}`);
-    }
-  }
+        ]);
+        bound++;
+        console.log(`  bound       "${text}" -> ${chosen.name} (score ${chosen.score})`);
+      } else {
+        // Step 4 path — synthesize a new resource and bind.
+        // Tier-3 checkpoint (interactive only): confirm per-synthesis. Lets the
+        // user steer which entities get stub resources vs. left unresolved.
+        const proceedYield = isInteractive()
+          ? await confirm(`No confident match for "${text}". Synthesize a new resource for it?`, true)
+          : true;
+        if (!proceedYield) {
+          skipped++;
+          console.log(`  skipped     "${text}"`);
+          continue;
+        }
 
-  console.log(
-    `\nDone. ${bound} bound to existing, ${synthesized} synthesized, ${skipped} skipped.`,
-  );
-  console.log(
-    `Paper-graph rooted at ${rId} with ${bound + synthesized} bound annotations.`,
-  );
-  await session.dispose();
-  closeInteractive();
+        const yieldEvent = await semiont.yield.fromAnnotation(rId, ann.id, {
+          title: text,
+          storageUri: `file://generated/${slugify(text)}.md`,
+          context,
+        });
+
+        // The final emission of yield.fromAnnotation is { kind: 'complete', data: JobCompleteCommand }
+        // where data.result is a JobGenerationResult carrying the new resourceId.
+        if (yieldEvent.kind !== 'complete') {
+          console.warn(`  unexpected yield event kind for "${text}": ${yieldEvent.kind}`);
+          continue;
+        }
+        const newResourceId = (
+          yieldEvent.data.result as { resourceId?: string } | undefined
+        )?.resourceId;
+        if (!newResourceId) {
+          console.warn(`  yield.fromAnnotation gave no resourceId for "${text}"`);
+          continue;
+        }
+
+        await semiont.bind.body(rId, ann.id, [
+          {
+            op: 'add',
+            item: {
+              type: 'SpecificResource',
+              source: newResourceId,
+              purpose: 'linking',
+            },
+          },
+        ]);
+        synthesized++;
+        console.log(`  synthesized "${text}" -> ${newResourceId}`);
+      }
+    }
+
+    console.log(
+      `\nDone. ${bound} bound to existing, ${synthesized} synthesized, ${skipped} skipped.`,
+    );
+    console.log(
+      `Paper-graph rooted at ${rId} with ${bound + synthesized} bound annotations.`,
+    );
+    closeInteractive();
+  } finally {
+    await session.dispose();
+  }
 }
 
 main().catch((e) => {

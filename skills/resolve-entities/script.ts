@@ -57,99 +57,102 @@ async function main(): Promise<void> {
   const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
   const semiont = session.client;
 
-  const { resourceId: rId } = await semiont.yield.resource({
-    name: paper.title,
-    file: Buffer.from(formatArxivPaper(paper), 'utf-8'),
-    format: 'text/markdown',
-    entityTypes: ['research-paper'],
-    storageUri: `file://papers/arxiv-${paper.id}.md`,
-  });
-
-  console.log('Detecting entity references...');
-  await semiont.mark.assist(rId, 'linking', { entityTypes: ENTITY_TYPES });
-
-  const annotations = await semiont.browse.annotations(rId);
-  const unresolved = annotations.filter((ann) => {
-    if (ann.motivation !== 'linking') return false;
-    const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-    return !bodies.some((b: any) => b.type === 'SpecificResource');
-  });
-  console.log(`${unresolved.length} unresolved references to attempt resolution`);
-
-  let bound = 0;
-  let stillUnresolved = 0;
-
-  for (const ann of unresolved) {
-    const target = ann.target;
-    const selectors =
-      typeof target === 'string' || !target.selector
-        ? []
-        : Array.isArray(target.selector)
-          ? target.selector
-          : [target.selector];
-    let text = '';
-    for (const s of selectors) {
-      if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
-    }
-
-    // Gather LLM context for this annotation
-    const gather = await semiont.gather.annotation(rId, ann.id, {
-      contextWindow: 2000,
+  try {
+    const { resourceId: rId } = await semiont.yield.resource({
+      name: paper.title,
+      file: Buffer.from(formatArxivPaper(paper), 'utf-8'),
+      format: 'text/markdown',
+      entityTypes: ['research-paper'],
+      storageUri: `file://papers/arxiv-${paper.id}.md`,
     });
-    if (!('response' in gather)) continue;
-    const context = gather.response as GatheredContext;
 
-    // Search the KB for candidate matches
-    const matchResult = await semiont.match.search(rId, ann.id, context, {
-      limit: 10,
-      useSemanticScoring: true,
+    console.log('Detecting entity references...');
+    await semiont.mark.assist(rId, 'linking', { entityTypes: ENTITY_TYPES });
+
+    const annotations = await semiont.browse.annotations(rId);
+    const unresolved = annotations.filter((ann) => {
+      if (ann.motivation !== 'linking') return false;
+      const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
+      return !bodies.some((b: any) => b.type === 'SpecificResource');
     });
-    const candidates = matchResult.response;
-    const top = candidates[0];
-    const topScore = top?.score ?? 0;
+    console.log(`${unresolved.length} unresolved references to attempt resolution`);
 
-    let chosen = top && topScore >= MATCH_THRESHOLD ? top : null;
+    let bound = 0;
+    let stillUnresolved = 0;
 
-    // Tier-3 checkpoint: borderline scores get user disambiguation.
-    // Clearly-above auto-bind; clearly-below auto-skip; in-between asks.
-    const borderline =
-      isInteractive() &&
-      candidates.length > 0 &&
-      topScore < MATCH_THRESHOLD + BORDERLINE_BAND &&
-      topScore >= MATCH_THRESHOLD - BORDERLINE_BAND;
+    for (const ann of unresolved) {
+      const target = ann.target;
+      const selectors =
+        typeof target === 'string' || !target.selector
+          ? []
+          : Array.isArray(target.selector)
+            ? target.selector
+            : [target.selector];
+      let text = '';
+      for (const s of selectors) {
+        if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
+      }
 
-    if (borderline) {
-      const picked = await pick(
-        `Borderline match for "${text}" (top score ${topScore}, threshold ${MATCH_THRESHOLD}):`,
-        candidates.slice(0, 5),
-        (c) => `${c.name ?? '(unnamed)'} [score ${c.score ?? '?'}, id ${c['@id'] ?? '?'}]`,
-      );
-      chosen = picked ?? null;
-    }
+      // Gather LLM context for this annotation
+      const gather = await semiont.gather.annotation(rId, ann.id, {
+        contextWindow: 2000,
+      });
+      if (!('response' in gather)) continue;
+      const context = gather.response as GatheredContext;
 
-    if (chosen) {
-      // Bind — link the annotation to the chosen resource
-      await semiont.bind.body(rId, ann.id, [
-        {
-          op: 'add',
-          item: {
-            type: 'SpecificResource',
-            source: chosen['@id'],
-            purpose: 'linking',
+      // Search the KB for candidate matches
+      const matchResult = await semiont.match.search(rId, ann.id, context, {
+        limit: 10,
+        useSemanticScoring: true,
+      });
+      const candidates = matchResult.response;
+      const top = candidates[0];
+      const topScore = top?.score ?? 0;
+
+      let chosen = top && topScore >= MATCH_THRESHOLD ? top : null;
+
+      // Tier-3 checkpoint: borderline scores get user disambiguation.
+      // Clearly-above auto-bind; clearly-below auto-skip; in-between asks.
+      const borderline =
+        isInteractive() &&
+        candidates.length > 0 &&
+        topScore < MATCH_THRESHOLD + BORDERLINE_BAND &&
+        topScore >= MATCH_THRESHOLD - BORDERLINE_BAND;
+
+      if (borderline) {
+        const picked = await pick(
+          `Borderline match for "${text}" (top score ${topScore}, threshold ${MATCH_THRESHOLD}):`,
+          candidates.slice(0, 5),
+          (c) => `${c.name ?? '(unnamed)'} [score ${c.score ?? '?'}, id ${c['@id'] ?? '?'}]`,
+        );
+        chosen = picked ?? null;
+      }
+
+      if (chosen) {
+        // Bind — link the annotation to the chosen resource
+        await semiont.bind.body(rId, ann.id, [
+          {
+            op: 'add',
+            item: {
+              type: 'SpecificResource',
+              source: chosen['@id'],
+              purpose: 'linking',
+            },
           },
-        },
-      ]);
-      bound++;
-      console.log(`  bound  "${text}" -> ${chosen.name} (score ${chosen.score})`);
-    } else {
-      stillUnresolved++;
-      console.log(`  unresolved  "${text}"`);
+        ]);
+        bound++;
+        console.log(`  bound  "${text}" -> ${chosen.name} (score ${chosen.score})`);
+      } else {
+        stillUnresolved++;
+        console.log(`  unresolved  "${text}"`);
+      }
     }
-  }
 
-  console.log(`Done. Bound ${bound}, still unresolved ${stillUnresolved}.`);
-  await session.dispose();
-  closeInteractive();
+    console.log(`Done. Bound ${bound}, still unresolved ${stillUnresolved}.`);
+    closeInteractive();
+  } finally {
+    await session.dispose();
+  }
 }
 
 main().catch((e) => {
