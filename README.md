@@ -1,7 +1,6 @@
 # ArXiv Research Papers Knowledge Base
 
 [![Lint](https://github.com/The-AI-Alliance/semiont-arxiv-kb/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/The-AI-Alliance/semiont-arxiv-kb/actions/workflows/lint.yml?query=branch%3Amain)
-[![Build](https://github.com/The-AI-Alliance/semiont-arxiv-kb/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/The-AI-Alliance/semiont-arxiv-kb/actions/workflows/build.yml?query=branch%3Amain)
 [![License](https://img.shields.io/github/license/The-AI-Alliance/semiont-arxiv-kb)](https://github.com/The-AI-Alliance/semiont-arxiv-kb/blob/main/LICENSE)
 
 A starting point for collecting and annotating research papers from [arXiv](https://arxiv.org/) — sourced via the arXiv API and formatted for analysis, annotation, and knowledge extraction with [Semiont](https://github.com/The-AI-Alliance/semiont).
