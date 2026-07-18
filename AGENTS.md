@@ -36,7 +36,7 @@ These map naturally to the structure of an AI/ML research paper: who wrote it, w
 
 ## Working in containers — do not install npm packages on the host
 
-This template assumes a containerized workflow. The backend stack runs in containers (`.semiont/scripts/start.sh` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, or any other tooling on the host machine.
+This template assumes a containerized workflow. The backend stack runs in containers (`semiont start` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, or any other tooling on the host machine.
 
 Each skill's `SKILL.md` shows a `docker run` invocation that:
 
@@ -44,18 +44,19 @@ Each skill's `SKILL.md` shows a `docker run` invocation that:
 2. Installs `@semiont/sdk` and `tsx` *inside* the container
 3. Runs the skill's `script.ts` against the env-configured backend
 
-Apple Container, Docker, and Podman all accept the same `run --rm -v ... -w ... <image> <cmd>` form. The skills show `docker run`; substitute `container run` or `podman run` as your runtime requires. (Auto-detection à la the start.sh `for rt in container docker podman` loop is left to a wrapper if you want one.)
+Apple Container, Docker, and Podman all accept the same `run --rm -v ... -w ... <image> <cmd>` form. The skills show `docker run`; substitute `container run` or `podman run` as your runtime requires. (Auto-detection à la the launcher's container → docker → podman order is left to a wrapper if you want one.)
 
 ## Backend setup
 
 Before running any skill, the Semiont backend stack (PostgreSQL, Neo4j, Qdrant, Ollama, the API server, the worker pool, the smelter — and optionally Jaeger for traces) must be up. There are two paths.
 
-### Local: `start.sh`
+### Local: `semiont start`
 
-Recommended runtime: [Apple Container](https://github.com/apple/container). Docker and Podman work too — `start.sh` auto-detects.
+Recommended runtime: [Apple Container](https://github.com/apple/container). Docker and Podman work too — `semiont start` auto-detects.
 
 ```bash
-.semiont/scripts/start.sh --email admin@example.com --password password --observe
+brew install the-ai-alliance/semiont/semiont   # once
+semiont start --email admin@example.com --password password
 ```
 
 Flags:
@@ -99,7 +100,7 @@ Set once per environment, rarely changes:
 | `SEMIONT_USER_EMAIL` | Email of the authenticating user |
 | `SEMIONT_USER_PASSWORD` | Password for that user |
 
-For local with `start.sh`, that's the email/password you passed to `--email` / `--password`. For Codespaces, those are in `.devcontainer/admin.json`.
+For local with `semiont start`, that's the email/password you passed to `--email` / `--password`. For Codespaces, those are in `.devcontainer/admin.json`.
 
 ### Tier 2 — skill-invocation parameters
 

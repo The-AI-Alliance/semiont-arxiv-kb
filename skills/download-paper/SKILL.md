@@ -51,12 +51,12 @@ semiont.dispose();
 
 ## Run it
 
-**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup) for the full instructions. Typically `.semiont/scripts/start.sh --email admin@example.com --password password --observe` from the repo root.
+**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup) for the full instructions. Typically `semiont start --email admin@example.com --password password` from the repo root.
 
 From the repo root, with the backend up:
 
 ```bash
-# Discover the host's bridge-gateway IP — same probe `start.sh` uses.
+# Discover the host's bridge-gateway IP — same probe `semiont start` uses.
 # `localhost` from inside a freshly-spawned container is its own loopback,
 # not the host's; the backend lives at the bridge gateway.
 HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
