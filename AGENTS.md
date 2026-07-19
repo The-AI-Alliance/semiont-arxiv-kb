@@ -56,19 +56,18 @@ Recommended runtime: [Apple Container](https://github.com/apple/container). Dock
 
 ```bash
 brew install the-ai-alliance/semiont/semiont   # once
-semiont start --email admin@example.com --password password
+semiont start
+semiont useradd --email admin@example.com --password password --admin
 ```
 
 Flags:
-- `--email` / `--password` — admin user to seed (creates if absent, idempotent on re-run)
-- `--observe` — also start a Jaeger sidecar so you can watch OTel traces at http://localhost:16686 while skills run
 - `--config anthropic` — switch to cloud inference if you've exported `ANTHROPIC_API_KEY`; default is fully-local Ollama with Gemma models (~24 GB of model pulls on first run)
-- `--force-kill-ports` — if a previous run leaked something, kill whatever's holding the ports
-- `--no-cache` — force a fresh image build (use after pulling a new `@semiont/*` package release)
+- `--no-observe` — skip the Jaeger sidecar (on by default; OTel traces at http://localhost:16686 while skills run)
+- `--runtime <container|docker|podman>` — force a specific runtime instead of auto-detect
 
-`--help` lists everything. Bring the stack down with Ctrl-C in the same terminal, or `<runtime> stop semiont-backend semiont-worker semiont-smelter ...` from another shell.
+`--config`/`--runtime` are sticky — a bare `semiont start` repeats the last explicitly-passed values. `--help` lists everything. Follow logs with `semiont logs`; bring the stack down with `semiont stop`.
 
-Once the script reports `Backend healthy` (and Worker/Smelter), the API is at `http://localhost:4000` and the four KB skills below can hit it.
+Once `semiont start` reports `Backend healthy` (and Worker/Smelter), the API is at `http://localhost:4000` and the four KB skills below can hit it.
 
 ### Codespaces
 
@@ -100,7 +99,7 @@ Set once per environment, rarely changes:
 | `SEMIONT_USER_EMAIL` | Email of the authenticating user |
 | `SEMIONT_USER_PASSWORD` | Password for that user |
 
-For local with `semiont start`, that's the email/password you passed to `--email` / `--password`. For Codespaces, those are in `.devcontainer/admin.json`.
+For local with `semiont start`, that's the email/password you passed to `semiont useradd`. For Codespaces, those are in `.devcontainer/admin.json`.
 
 ### Tier 2 — skill-invocation parameters
 

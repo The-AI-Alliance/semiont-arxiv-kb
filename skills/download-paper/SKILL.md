@@ -51,7 +51,7 @@ semiont.dispose();
 
 ## Run it
 
-**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup) for the full instructions. Typically `semiont start --email admin@example.com --password password` from the repo root.
+**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup) for the full instructions. Typically `semiont start` then `semiont useradd --email admin@example.com --password password --admin` from the repo root.
 
 From the repo root, with the backend up:
 
