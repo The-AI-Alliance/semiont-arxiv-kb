@@ -71,7 +71,7 @@ Once `semiont start` reports `Backend healthy` (and Worker/Smelter), the API is 
 
 ### Codespaces
 
-Open the repo in a Codespace — `post-create.sh` builds the stack, `post-start.sh` brings it up, and admin credentials are auto-generated into `.devcontainer/admin.json`. Print them any time:
+Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up, and admin credentials are auto-generated into `.devcontainer/admin.json`. Print them any time:
 
 ```bash
 cat .devcontainer/admin.json
