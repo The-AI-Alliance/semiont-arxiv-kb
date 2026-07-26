@@ -62,7 +62,7 @@ semiont start
 Then create the admin user you'll sign in with:
 
 ```bash
-semiont useradd --email admin@example.com --password password --admin
+semiont useradd --email admin@example.com --admin
 ```
 
 Flags:
@@ -76,10 +76,11 @@ Once `semiont start` reports `Backend healthy` (and Worker/Smelter), the API is 
 
 ### Codespaces
 
-Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up, and admin credentials are auto-generated into `.devcontainer/admin.json`. Print them any time:
+Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up. No account is created — make the first admin (it prints a random password once):
 
 ```bash
-cat .devcontainer/admin.json
+docker compose -f .semiont/compose/backend.yml exec backend \
+  semiont-useradd --email you@example.com --generate-password --admin
 ```
 
 To reach the backend from your local Semiont browser (or from another container), forward the port:
@@ -104,7 +105,7 @@ Set once per environment, rarely changes:
 | `SEMIONT_USER_EMAIL` | Email of the authenticating user |
 | `SEMIONT_USER_PASSWORD` | Password for that user |
 
-For local with `semiont start`, that's the email/password you passed to `semiont useradd`. For Codespaces, those are in `.devcontainer/admin.json`.
+Local or Codespaces alike, that's the email/password from `semiont useradd` — nothing auto-creates an account.
 
 ### Tier 2 — skill-invocation parameters
 
