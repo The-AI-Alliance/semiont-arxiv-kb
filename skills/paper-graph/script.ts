@@ -17,7 +17,7 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KnowledgeBase,
+  type KbTarget,
   entityType,
   type GatheredContext,
 } from '@semiont/sdk';
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'arxiv-paper-graph',
     label: 'arxiv paper-graph',
     email,
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
     await semiont.mark.assist(rId, 'linking', { entityTypes: ENTITY_TYPES });
 
     // Steps 3 + 4 — resolve or synthesize, per annotation
-    const annotations = await semiont.browse.annotations(rId);
+    const annotations = await semiont.browse.annotations(rId).fresh();
     const unresolved = annotations.filter((ann) => {
       if (ann.motivation !== 'linking') return false;
       const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];

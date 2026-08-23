@@ -10,7 +10,7 @@
  * Usage: tsx skills/mark-entities/script.ts <arxiv-id>
  */
 
-import { SemiontSession, InMemorySessionStorage, type KnowledgeBase, entityType } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, entityType } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
 import { createdCount } from '../../src/mark-result.js';
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   const email = process.env.SEMIONT_USER_EMAIL!;
   const password = process.env.SEMIONT_USER_PASSWORD!;
   const u = new URL(baseUrl);
-  const kb: KnowledgeBase = {
+  const kb: KbTarget = {
     id: 'arxiv-mark-entities',
     label: 'arxiv mark-entities',
     email,
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
 
     // Tier-3 informational: surface what was detected so the user can see what
     // the model produced before deciding whether to proceed with downstream skills.
-    const annotations = await semiont.browse.annotations(rId);
+    const annotations = await semiont.browse.annotations(rId).fresh();
     const linking = annotations.filter((a) => a.motivation === 'linking');
     console.log(`\nResource ${rId} now carries ${linking.length} linking annotations.`);
     if (linking.length > 0) {
