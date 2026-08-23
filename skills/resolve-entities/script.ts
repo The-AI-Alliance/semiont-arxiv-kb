@@ -73,7 +73,7 @@ async function main(): Promise<void> {
     const unresolved = annotations.filter((ann) => {
       if (ann.motivation !== 'linking') return false;
       const bodies = Array.isArray(ann.body) ? ann.body : ann.body ? [ann.body] : [];
-      return !bodies.some((b: any) => b.type === 'SpecificResource');
+      return !bodies.some((b) => b.type === 'SpecificResource');
     });
     console.log(`${unresolved.length} unresolved references to attempt resolution`);
 
