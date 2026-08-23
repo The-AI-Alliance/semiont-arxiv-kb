@@ -5,7 +5,7 @@
  *   1. Download the paper from arXiv and create the central resource (yield.resource)
  *   2. Detect entity references across many entity types (mark.assist)
  *   3. Resolve each reference against the KB (gather.annotation, match.search, bind.body)
- *   4. Synthesize a new resource for any reference that didn't match (yield.fromAnnotation, then bind.body)
+ *   4. Synthesize a new resource for any reference that didn't match (yield.fromContext, then bind.body)
  *
  * The end state is a paper-graph: the central paper resource, plus one
  * resource per unresolved entity, with the original paper's annotations
@@ -90,7 +90,7 @@ async function main(): Promise<void> {
     console.log(`${unresolved.length} unresolved references to process`);
 
     // Tier-3 checkpoint: budget gate. With dozens of unresolved refs, this can
-    // mean dozens of yield.fromAnnotation calls (which run inference). Confirm
+    // mean dozens of yield.fromContext calls (which run inference). Confirm
     // the scope before committing.
     if (unresolved.length > 0) {
       const proceed = await confirm(
@@ -178,13 +178,12 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const yieldEvent = await semiont.yield.fromAnnotation(rId, ann.id, {
+        const yieldEvent = await semiont.yield.fromContext(context, {
           title: text,
           storageUri: `file://generated/${slugify(text)}.md`,
-          context,
         });
 
-        // The final emission of yield.fromAnnotation is { kind: 'complete', data: JobCompleteCommand }
+        // The final emission of yield.fromContext is { kind: 'complete', data: JobCompleteCommand }
         // where data.result is a JobGenerationResult carrying the new resourceId.
         if (yieldEvent.kind !== 'complete') {
           console.warn(`  unexpected yield event kind for "${text}": ${yieldEvent.kind}`);
@@ -194,7 +193,7 @@ async function main(): Promise<void> {
           yieldEvent.data.result as { resourceId?: string } | undefined
         )?.resourceId;
         if (!newResourceId) {
-          console.warn(`  yield.fromAnnotation gave no resourceId for "${text}"`);
+          console.warn(`  yield.fromContext gave no resourceId for "${text}"`);
           continue;
         }
 
