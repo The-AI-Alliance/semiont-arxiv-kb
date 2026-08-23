@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Write
 
 You are helping a user transform a single arXiv paper into a connected paper-graph: the paper itself, plus a constellation of resources representing its authors, cited papers, methods, datasets, benchmarks, concepts, and affiliations.
 
-This is the most elaborate of the four arXiv skills — the full five-verb pipeline. It builds on [`resolve-entities`](../resolve-entities/) by adding a `yield.fromAnnotation` step for every reference that didn't match a confident KB candidate.
+This is the most elaborate of the four arXiv skills — the full five-verb pipeline. It builds on [`resolve-entities`](../resolve-entities/) by adding a `yield.fromContext` step for every reference that didn't match a confident KB candidate.
 
 The pattern mirrors the upstream [`semiont-wiki` skill](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol/skills/semiont-wiki), adapted for research-paper structure.
 
@@ -21,13 +21,13 @@ The pattern mirrors the upstream [`semiont-wiki` skill](https://github.com/The-A
 | 3 | `gather.annotation` (per annotation) | Fetch LLM context for a reference |
 | 4 | `match.search` (per annotation) | Search the KB for candidate matches |
 | 5a | `bind.body` (per annotation) | If a candidate scores ≥ threshold, link to it |
-| 5b | `yield.fromAnnotation` + `bind.body` (per annotation) | Otherwise, generate a new resource and link to that |
+| 5b | `yield.fromContext` + `bind.body` (per annotation) | Otherwise, generate a new resource and link to that |
 
 Steps 3-5 run in a per-annotation loop. The threshold between "bind to existing" and "generate new" is configurable via `MATCH_THRESHOLD`.
 
 ## SDK verbs
 
-- `yield.resource`, `yield.fromAnnotation`, `mark.assist`, `gather.annotation`, `match.search`, `bind.body`
+- `yield.resource`, `yield.fromContext`, `mark.assist`, `gather.annotation`, `match.search`, `bind.body`
 
 ## Code
 
@@ -42,13 +42,11 @@ if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
   }]);
 } else {
   // Synthesize a new resource and bind to it.
-  // The final emission of yield.fromAnnotation is { kind: 'complete', data: JobCompleteCommand };
+  // The final emission of yield.fromContext is { kind: 'complete', data: JobCompleteCommand };
   // the new resource id is at data.result.resourceId (when result is a JobGenerationResult).
-  const yieldEvent = await semiont.yield.fromAnnotation(rId, annId, {
+  const yieldEvent = await semiont.yield.fromContext(context, {
     title: text,
-    storageUri: `file://generated/${slugify(text)}.md`,
-    context,
-  });
+    storageUri: `file://generated/${slugify(text)}.md`});
   const newResourceId = yieldEvent.kind === 'complete'
     ? (yieldEvent.data.result as { resourceId?: string } | undefined)?.resourceId
     : undefined;
