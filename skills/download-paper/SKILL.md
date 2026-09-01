@@ -12,7 +12,7 @@ Given an arXiv ID (e.g. `1706.03762`), this skill:
 
 1. Fetches the paper's metadata from the arXiv API using `fetchArxivPaper` from [`src/arxiv.ts`](../../src/arxiv.ts).
 2. Formats it as a markdown document with title, authors, abstract, and links.
-3. Uploads it to the backend via `yield.resource(...)` from `@semiont/sdk`.
+3. Uploads it to the gateway via `yield.resource(...)` from `@semiont/sdk`.
 
 The result is one new resource in the KB, tagged with the entity type `research-paper`. **No annotations are created** — for that, run [`mark-entities`](../mark-entities/) after this.
 
@@ -51,14 +51,14 @@ semiont.dispose();
 
 ## Run it
 
-**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup) for the full instructions. Typically `semiont start` then `semiont useradd --email admin@example.com --admin` from the repo root.
+**Prerequisite: the Semiont stack is running** — see [AGENTS.md › Stack setup](../../AGENTS.md#stack-setup) for the full instructions. Typically `semiont start` then `semiont useradd --email admin@example.com --admin` from the repo root.
 
-From the repo root, with the backend up:
+From the repo root, with the stack up:
 
 ```bash
 # Discover the host's bridge-gateway IP — same probe `semiont start` uses.
 # `localhost` from inside a freshly-spawned container is its own loopback,
-# not the host's; the backend lives at the bridge gateway.
+# not the host's; the stack lives at the bridge gateway.
 HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
 
 container run --rm -v "$(pwd):/work" -w /work \
@@ -71,7 +71,7 @@ container run --rm -v "$(pwd):/work" -w /work \
 
 The npm install happens *inside* the throwaway container — nothing lands on your host. Substitute `docker run` or `podman run` for `container run` if those are your runtimes; the `HOST_ADDR` discovery uses the same shape against any of them.
 
-If you're already on the host shell (not in a container) and the backend is reachable directly — e.g., a codespace port forwarded to your host with `gh codespace ports forward 4000:4000` — you can skip the discovery and run a Node directly *inside* a single container against `http://localhost:4000` by adding `--network host` (Linux Docker) or by setting `SEMIONT_API_URL=http://host.docker.internal:4000` (Docker Desktop / Podman macOS).
+If you're already on the host shell (not in a container) and the gateway is reachable directly — e.g., a codespace port forwarded to your host with `gh codespace ports forward 4000:4000` — you can skip the discovery and run a Node directly *inside* a single container against `http://localhost:4000` by adding `--network host` (Linux Docker) or by setting `SEMIONT_API_URL=http://host.docker.internal:4000` (Docker Desktop / Podman macOS).
 
 ## Output
 

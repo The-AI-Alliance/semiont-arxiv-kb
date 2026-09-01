@@ -15,7 +15,7 @@ The annotations are **unresolved** — each one carries an entity type but is no
 ## SDK verbs
 
 - `yield.resource` — create the paper resource (same as `download-paper`)
-- `mark.assist` — detect entity references via the backend's AI-assist pipeline
+- `mark.assist` — detect entity references via Semiont's AI-assist pipeline
 
 ## Code
 
@@ -42,7 +42,7 @@ console.log(`Created ${createdCount(progress)} unresolved references`);
 
 ## Run it
 
-**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup).
+**Prerequisite: the Semiont stack is running** — see [AGENTS.md › Stack setup](../../AGENTS.md#stack-setup).
 
 ```bash
 # Discover the host's bridge-gateway IP (see download-paper for the why).
@@ -62,7 +62,7 @@ Override the entity types per run with `-e ENTITY_TYPES='Author,CitedPaper'` for
 
 ## Output
 
-After running, query the backend to see what was detected:
+After running, query the gateway to see what was detected:
 
 ```typescript
 const annotations = await semiont.browse.annotations(rId);

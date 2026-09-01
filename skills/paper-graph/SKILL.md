@@ -62,7 +62,7 @@ if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
 
 ## Run it
 
-**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup).
+**Prerequisite: the Semiont stack is running** — see [AGENTS.md › Stack setup](../../AGENTS.md#stack-setup).
 
 ```bash
 HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
@@ -104,7 +104,7 @@ For papers with many references (or batch ingestion of multiple papers), the loo
 
 ## Guidance for the AI assistant
 
-- **Generated resources are stubs.** They have a title and a storageUri but minimal body content — the backend's generation step fills in what `gather.annotation` produced. They are AI-generated approximations, not finished articles. Surface this to users.
+- **Generated resources are stubs.** They have a title and a storageUri but minimal body content — the generation worker fills in what `gather.annotation` produced. They are AI-generated approximations, not finished articles. Surface this to users.
 - **Inspect the result.** After running, `semiont.browse.annotations(rId)` shows every annotation; filter for `SpecificResource` body items to see which got bound. `semiont.browse.resources({ entityType: 'CitedPaper' })` shows the synthesized cited-paper resources.
 - **Threshold sets the bind/synthesize ratio.** Higher threshold → more synthesis, fewer binds. Tune to what your KB needs.
 - **Re-running on the same paper** will create duplicate resources unless you check first. To re-run safely, delete the previous central resource (and its descendants), or use `semiont.browse.resources({ search: '<title>' })` to detect and skip.
