@@ -5,7 +5,7 @@ This is an arXiv-flavored Semiont knowledge base. The corpus is research papers 
 ## What's here
 
 - **`src/arxiv.ts`** — small helper module for fetching paper metadata via the arXiv API (`fetchArxivPaper`) and rendering it as markdown (`formatArxivPaper`). Reusable from any skill.
-- **`skills/`** — four ready-to-run skills, increasing in complexity. Each ships a `SKILL.md` (orientation + frontmatter for skill-aware tools like Claude Code) plus a `script.ts` that uses `@semiont/sdk` against the running backend.
+- **`skills/`** — four ready-to-run skills, increasing in complexity. Each ships a `SKILL.md` (orientation + frontmatter for skill-aware tools like Claude Code) plus a `script.ts` that uses `@semiont/sdk` against the running stack.
 
 | Skill | What it does | New SDK verbs |
 |---|---|---|
@@ -36,19 +36,19 @@ These map naturally to the structure of an AI/ML research paper: who wrote it, w
 
 ## Working in containers — do not install npm packages on the host
 
-This template assumes a containerized workflow. The backend stack runs in containers (`semiont start` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, or any other tooling on the host machine.
+This template assumes a containerized workflow. The stack runs in containers (`semiont start` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, or any other tooling on the host machine.
 
 Each skill's `SKILL.md` shows a `docker run` invocation that:
 
 1. Mounts the repo as `/work` inside a throwaway `node:24-alpine` container
 2. Installs `@semiont/sdk` and `tsx` *inside* the container
-3. Runs the skill's `script.ts` against the env-configured backend
+3. Runs the skill's `script.ts` against the env-configured stack
 
 Apple Container, Docker, and Podman all accept the same `run --rm -v ... -w ... <image> <cmd>` form. The skills show `docker run`; substitute `container run` or `podman run` as your runtime requires. (Auto-detection à la the launcher's container → docker → podman order is left to a wrapper if you want one.)
 
-## Backend setup
+## Stack setup
 
-Before running any skill, the Semiont backend stack (PostgreSQL, Neo4j, Qdrant, Ollama, the API server, the worker pool, the smelter — and optionally Jaeger for traces) must be up. There are two paths.
+Before running any skill, the Semiont stack (PostgreSQL, Neo4j, Qdrant, Ollama, the gateway, the archivist, the librarian, the worker pool, the smelter — and optionally Jaeger for traces) must be up. There are two paths.
 
 ### Local: `semiont start`
 
@@ -72,18 +72,18 @@ Flags:
 
 `--config`/`--runtime` are sticky — a bare `semiont start` repeats the last explicitly-passed values. `--help` lists everything. Follow logs with `semiont logs`; bring the stack down with `semiont stop`.
 
-Once `semiont start` reports `Backend healthy` (and Worker/Smelter), the API is at `http://localhost:4000` and the four KB skills below can hit it.
+Once `semiont start` reports `Gateway healthy` (and Worker/Smelter), the API is at `http://localhost:4000` and the four KB skills below can hit it.
 
 ### Codespaces
 
 Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up. No account is created — make the first admin (it prints a random password once):
 
 ```bash
-docker compose -f .semiont/compose/backend.yml exec backend \
+docker compose -f .semiont/compose/backend.yml exec gateway \
   semiont-useradd --email you@example.com --generate-password --admin
 ```
 
-To reach the backend from your local Semiont browser (or from another container), forward the port:
+To reach the gateway from your local Semiont browser (or from another container), forward the port:
 
 ```bash
 gh codespace ports forward 4000:4000
@@ -101,7 +101,7 @@ Set once per environment, rarely changes:
 
 | Var | Purpose |
 |---|---|
-| `SEMIONT_API_URL` | Base URL of the backend (default `http://localhost:4000`) |
+| `SEMIONT_API_URL` | Base URL of the gateway (default `http://localhost:4000`) |
 | `SEMIONT_USER_EMAIL` | Email of the authenticating user |
 | `SEMIONT_USER_PASSWORD` | Password for that user |
 

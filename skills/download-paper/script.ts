@@ -70,7 +70,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    console.log('Uploading to backend...');
+    console.log('Uploading to gateway...');
     const { resourceId } = await semiont.yield.resource({
       name: paper.title,
       file: Buffer.from(markdown, 'utf-8'),

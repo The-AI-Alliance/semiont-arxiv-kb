@@ -49,7 +49,7 @@ if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
 
 ## Run it
 
-**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup).
+**Prerequisite: the Semiont stack is running** — see [AGENTS.md › Stack setup](../../AGENTS.md#stack-setup).
 
 ```bash
 HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
