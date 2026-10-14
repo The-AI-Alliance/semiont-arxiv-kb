@@ -26,17 +26,28 @@ The result is one new resource in the KB, tagged with the entity type `research-
 The full script lives at [`script.ts`](script.ts) in this directory. Heart of it:
 
 ```typescript
-import { SemiontClient } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, httpKb } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 
 const paper = await fetchArxivPaper(process.argv[2]);
 const markdown = formatArxivPaper(paper);
 
-const semiont = await SemiontClient.signInHttp({
-  baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
-  email: process.env.SEMIONT_USER_EMAIL!,
-  password: process.env.SEMIONT_USER_PASSWORD!,
+const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+const session = await SemiontSession.signInDevice({
+  kb: httpKb({
+    id: 'arxiv-download-paper',
+    label: 'arxiv download-paper',
+    host: gateway.hostname,
+    port: Number(gateway.port) || 4000,
+    protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+  }),
+  storage: new InMemorySessionStorage(),
+  onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+    console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+    if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+  },
 });
+const semiont = session.client;
 
 const { resourceId } = await semiont.yield.resource({
   name: paper.title,
@@ -63,11 +74,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/download-paper/script.ts 1706.03762'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/download-paper/script.ts 1706.03762'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 The npm install happens *inside* the throwaway container — nothing lands on your host. Substitute `docker run` or `podman run` for `container run` if those are your runtimes; the `HOST_ADDR` discovery uses the same shape against any of them.
 

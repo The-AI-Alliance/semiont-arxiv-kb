@@ -13,9 +13,9 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
+  httpKb,
   entityType,
-  type GatheredContext,
+  getAnnotationExactText,
 } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 import { pick, close as closeInteractive, isInteractive } from '../../src/interactive.js';
@@ -44,17 +44,21 @@ async function main(): Promise<void> {
   const paper = await fetchArxivPaper(arxivId);
   console.log(`Paper: ${paper.title}`);
 
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'arxiv-resolve-entities',
-    label: 'arxiv resolve-entities',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'arxiv-resolve-entities',
+      label: 'arxiv resolve-entities',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -67,7 +71,7 @@ async function main(): Promise<void> {
     });
 
     console.log('Detecting entity references...');
-    await semiont.mark.assist(rId, 'linking', { entityTypes: ENTITY_TYPES });
+    await semiont.mark.delegate(rId, { motivation: 'linking', entityTypes: ENTITY_TYPES });
 
     const annotations = await semiont.browse.annotations(rId).fresh();
     const unresolved = annotations.filter((ann) => {
@@ -81,24 +85,12 @@ async function main(): Promise<void> {
     let stillUnresolved = 0;
 
     for (const ann of unresolved) {
-      const target = ann.target;
-      const selectors =
-        typeof target === 'string' || !target.selector
-          ? []
-          : Array.isArray(target.selector)
-            ? target.selector
-            : [target.selector];
-      let text = '';
-      for (const s of selectors) {
-        if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
-      }
+      const text = getAnnotationExactText(ann);
 
       // Gather LLM context for this annotation
-      const gather = await semiont.gather.annotation(rId, ann.id, {
+      const { response: context } = await semiont.gather.annotation(rId, ann.id, {
         contextWindow: 2000,
       });
-      if (!('response' in gather)) continue;
-      const context = gather.response as GatheredContext;
 
       // Search the KB for candidate matches
       const matchResult = await semiont.match.search(rId, ann.id, context, {

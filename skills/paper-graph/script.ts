@@ -3,9 +3,9 @@
  *
  * Combines all four steps:
  *   1. Download the paper from arXiv and create the central resource (yield.resource)
- *   2. Detect entity references across many entity types (mark.assist)
+ *   2. Detect entity references across many entity types (mark.delegate)
  *   3. Resolve each reference against the KB (gather.annotation, match.search, bind.body)
- *   4. Synthesize a new resource for any reference that didn't match (yield.fromContext, then bind.body)
+ *   4. Synthesize a new resource for any reference that didn't match (yield.delegate, then bind.body)
  *
  * The end state is a paper-graph: the central paper resource, plus one
  * resource per unresolved entity, with the original paper's annotations
@@ -17,9 +17,9 @@
 import {
   SemiontSession,
   InMemorySessionStorage,
-  type KbTarget,
+  httpKb,
   entityType,
-  type GatheredContext,
+  getAnnotationExactText,
 } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 import {
@@ -53,17 +53,21 @@ async function main(): Promise<void> {
   const paper = await fetchArxivPaper(arxivId);
   console.log(`Paper: ${paper.title}`);
 
-  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
-  const email = process.env.SEMIONT_USER_EMAIL!;
-  const password = process.env.SEMIONT_USER_PASSWORD!;
-  const u = new URL(baseUrl);
-  const kb: KbTarget = {
-    id: 'arxiv-paper-graph',
-    label: 'arxiv paper-graph',
-    email,
-    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
-  };
-  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
+  const session = await SemiontSession.signInDevice({
+    kb: httpKb({
+      id: 'arxiv-paper-graph',
+      label: 'arxiv paper-graph',
+      host: gateway.hostname,
+      port: Number(gateway.port) || 4000,
+      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
+    }),
+    storage: new InMemorySessionStorage(),
+    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
+      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
+      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
+    },
+  });
   const semiont = session.client;
 
   try {
@@ -78,7 +82,7 @@ async function main(): Promise<void> {
 
     // Step 2 — mark entity references
     console.log('Detecting entity references...');
-    await semiont.mark.assist(rId, 'linking', { entityTypes: ENTITY_TYPES });
+    await semiont.mark.delegate(rId, { motivation: 'linking', entityTypes: ENTITY_TYPES });
 
     // Steps 3 + 4 — resolve or synthesize, per annotation
     const annotations = await semiont.browse.annotations(rId).fresh();
@@ -90,7 +94,7 @@ async function main(): Promise<void> {
     console.log(`${unresolved.length} unresolved references to process`);
 
     // Tier-3 checkpoint: budget gate. With dozens of unresolved refs, this can
-    // mean dozens of yield.fromContext calls (which run inference). Confirm
+    // mean dozens of yield.delegate calls (which run inference). Confirm
     // the scope before committing.
     if (unresolved.length > 0) {
       const proceed = await confirm(
@@ -109,23 +113,11 @@ async function main(): Promise<void> {
     let skipped = 0;
 
     for (const ann of unresolved) {
-      const target = ann.target;
-      const selectors =
-        typeof target === 'string' || !target.selector
-          ? []
-          : Array.isArray(target.selector)
-            ? target.selector
-            : [target.selector];
-      let text = '';
-      for (const s of selectors) {
-        if (s.type === 'TextQuoteSelector') { text = s.exact; break; }
-      }
+      const text = getAnnotationExactText(ann);
 
-      const gather = await semiont.gather.annotation(rId, ann.id, {
+      const { response: context } = await semiont.gather.annotation(rId, ann.id, {
         contextWindow: 2000,
       });
-      if (!('response' in gather)) continue;
-      const context = gather.response as GatheredContext;
 
       const matchResult = await semiont.match.search(rId, ann.id, context, {
         limit: 10,
@@ -178,22 +170,20 @@ async function main(): Promise<void> {
           continue;
         }
 
-        const yieldEvent = await semiont.yield.fromContext(context, {
+        const yieldEvent = await semiont.yield.delegate({
+          context,
           title: text,
           storageUri: `file://generated/${slugify(text)}.md`,
         });
 
-        // The final emission of yield.fromContext is { kind: 'complete', data: JobCompleteCommand }
-        // where data.result is a JobGenerationResult carrying the new resourceId.
-        if (yieldEvent.kind !== 'complete') {
-          console.warn(`  unexpected yield event kind for "${text}": ${yieldEvent.kind}`);
+        // The awaited job's result names the new resource, or says the job declined.
+        if (!yieldEvent.result || !('resourceId' in yieldEvent.result)) {
+          console.warn(`  the generation made no resource for "${text}"`);
           continue;
         }
-        const newResourceId = (
-          yieldEvent.data.result as { resourceId?: string } | undefined
-        )?.resourceId;
+        const newResourceId = yieldEvent.result && 'resourceId' in yieldEvent.result ? yieldEvent.result.resourceId : undefined;
         if (!newResourceId) {
-          console.warn(`  yield.fromContext gave no resourceId for "${text}"`);
+          console.warn(`  yield.delegate gave no resourceId for "${text}"`);
           continue;
         }
 

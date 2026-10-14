@@ -8,26 +8,26 @@ allowed-tools: Bash, Read, Write
 
 You are helping a user transform a single arXiv paper into a connected paper-graph: the paper itself, plus a constellation of resources representing its authors, cited papers, methods, datasets, benchmarks, concepts, and affiliations.
 
-This is the most elaborate of the four arXiv skills — the full five-verb pipeline. It builds on [`resolve-entities`](../resolve-entities/) by adding a `yield.fromContext` step for every reference that didn't match a confident KB candidate.
+This is the most elaborate of the four arXiv skills — the full five-verb pipeline. It builds on [`resolve-entities`](../resolve-entities/) by adding a `yield.delegate` step for every reference that didn't match a confident KB candidate.
 
-The pattern mirrors the upstream [`semiont-wiki` skill](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol/skills/semiont-wiki), adapted for research-paper structure.
+The pattern mirrors the upstream [`semiont-wiki` skill](https://github.com/The-AI-Alliance/semiont/tree/main/docs/builder/skills/semiont-wiki), adapted for research-paper structure.
 
 ## Pipeline
 
 | # | Verb | Purpose |
 |---|---|---|
 | 1 | `yield.resource` | Create the central paper resource |
-| 2 | `mark.assist` | Detect entity references across all configured entity types |
+| 2 | `mark.delegate` | Detect entity references across all configured entity types |
 | 3 | `gather.annotation` (per annotation) | Fetch LLM context for a reference |
 | 4 | `match.search` (per annotation) | Search the KB for candidate matches |
 | 5a | `bind.body` (per annotation) | If a candidate scores ≥ threshold, link to it |
-| 5b | `yield.fromContext` + `bind.body` (per annotation) | Otherwise, generate a new resource and link to that |
+| 5b | `yield.delegate` + `bind.body` (per annotation) | Otherwise, generate a new resource and link to that |
 
 Steps 3-5 run in a per-annotation loop. The threshold between "bind to existing" and "generate new" is configurable via `MATCH_THRESHOLD`.
 
 ## SDK verbs
 
-- `yield.resource`, `yield.fromContext`, `mark.assist`, `gather.annotation`, `match.search`, `bind.body`
+- `yield.resource`, `yield.delegate`, `mark.delegate`, `gather.annotation`, `match.search`, `bind.body`
 
 ## Code
 
@@ -42,13 +42,14 @@ if (top && (top.score ?? 0) >= MATCH_THRESHOLD) {
   }]);
 } else {
   // Synthesize a new resource and bind to it.
-  // The final emission of yield.fromContext is { kind: 'complete', data: JobCompleteCommand };
-  // the new resource id is at data.result.resourceId (when result is a JobGenerationResult).
-  const yieldEvent = await semiont.yield.fromContext(context, {
+  // The awaited job's result names the new resource, or says the job declined.
+  const generated = await semiont.yield.delegate({
+    context,
     title: text,
-    storageUri: `file://generated/${slugify(text)}.md`});
-  const newResourceId = yieldEvent.kind === 'complete'
-    ? (yieldEvent.data.result as { resourceId?: string } | undefined)?.resourceId
+    storageUri: `file://generated/${slugify(text)}.md`,
+  });
+  const newResourceId = generated.result && 'resourceId' in generated.result
+    ? generated.result.resourceId
     : undefined;
 
   if (newResourceId) {
@@ -69,12 +70,12 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   -e MATCH_THRESHOLD=30 \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/paper-graph/script.ts 1706.03762'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/paper-graph/script.ts 1706.03762'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 (See [`download-paper`'s "Run it"](../download-paper/SKILL.md#run-it) for the why behind the `HOST_ADDR` probe.)
 
@@ -100,7 +101,7 @@ For *Attention Is All You Need* (1706.03762) on a fresh KB with all seven entity
 
 ## Long-running script considerations
 
-For papers with many references (or batch ingestion of multiple papers), the loop can run long enough to cross access-token expiry. The example uses `SemiontClient.signInHttp(...)` for simplicity — for genuinely long-running scripts, swap to `SemiontSession.signInHttp(...)`, which owns refresh, validation, and storage.
+For papers with many references (or batch ingestion of multiple papers), the loop can run long enough to cross access-token expiry. The script holds a `SemiontSession`, which renews its token before it expires, so a long run outlives any one token.
 
 ## Guidance for the AI assistant
 
@@ -108,5 +109,5 @@ For papers with many references (or batch ingestion of multiple papers), the loo
 - **Inspect the result.** After running, `semiont.browse.annotations(rId)` shows every annotation; filter for `SpecificResource` body items to see which got bound. `semiont.browse.resources({ entityType: 'CitedPaper' })` shows the synthesized cited-paper resources.
 - **Threshold sets the bind/synthesize ratio.** Higher threshold → more synthesis, fewer binds. Tune to what your KB needs.
 - **Re-running on the same paper** will create duplicate resources unless you check first. To re-run safely, delete the previous central resource (and its descendants), or use `semiont.browse.resources({ search: '<title>' })` to detect and skip.
-- **Errors should narrow.** Catch `SemiontError`, narrow to `APIError` for HTTP issues or `BusRequestError` for bus-level timeouts/rejections. See [SDK error handling](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk/docs).
-- **For deeper background**, see the [`semiont-wiki` skill](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol/skills/semiont-wiki) — same pattern, less arXiv-specific.
+- **Errors should narrow.** Catch `SemiontError`, narrow to `APIError` for HTTP issues or `BusRequestError` for bus-level timeouts/rejections. See [SDK error handling](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/Usage.md).
+- **For deeper background**, see the [`semiont-wiki` skill](https://github.com/The-AI-Alliance/semiont/tree/main/docs/builder/skills/semiont-wiki) — same pattern, less arXiv-specific.
