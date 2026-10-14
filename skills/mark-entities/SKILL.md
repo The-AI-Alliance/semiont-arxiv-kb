@@ -8,21 +8,21 @@ allowed-tools: Bash, Read, Write
 
 You are helping a user ingest an arXiv paper *and* mark entity mentions in it.
 
-This skill builds on [`download-paper`](../download-paper/) by adding a `mark.assist` call that detects entity-typed references in the paper text. The result: one resource for the paper, plus a set of `linking`-motivation annotations on text spans that mention authors, cited papers, methods, datasets, benchmarks, concepts, or affiliations.
+This skill builds on [`download-paper`](../download-paper/) by adding a `mark.delegate` call that detects entity-typed references in the paper text. The result: one resource for the paper, plus a set of `linking`-motivation annotations on text spans that mention authors, cited papers, methods, datasets, benchmarks, concepts, or affiliations.
 
 The annotations are **unresolved** — each one carries an entity type but is not yet bound to a specific KB resource. `resolve-entities` and `paper-graph` handle that next step.
 
 ## SDK verbs
 
 - `yield.resource` — create the paper resource (same as `download-paper`)
-- `mark.assist` — detect entity references via Semiont's AI-assist pipeline
+- `mark.delegate` — detect entity references via Semiont's AI-assist pipeline
 
 ## Code
 
 The full script lives at [`script.ts`](script.ts). The new piece on top of `download-paper`:
 
 ```typescript
-import { SemiontClient, entityType } from '@semiont/sdk';
+import { entityType } from '@semiont/sdk';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -32,12 +32,13 @@ const ENTITY_TYPES = (
   .map((t) => entityType(t.trim()));
 
 // ... after creating the paper resource (rId):
-const progress = await semiont.mark.assist(rId, 'linking', {
+const done = await semiont.mark.delegate(rId, {
+  motivation: 'linking',
   entityTypes: ENTITY_TYPES,
 });
-// `createdCount` (from `src/mark-result.ts`) reads the per-motivation
-// result field on the awaited MarkAssistEvent.
-console.log(`Created ${createdCount(progress)} unresolved references`);
+// The awaited job's result has the count, or says the job declined.
+const n = done.result && 'persisted' in done.result ? done.result.persisted : 0;
+console.log(`Created ${n} unresolved references`);
 ```
 
 ## Run it
@@ -50,11 +51,11 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/mark-entities/script.ts 1706.03762'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/mark-entities/script.ts 1706.03762'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Override the entity types per run with `-e ENTITY_TYPES='Author,CitedPaper'` for a faster pass focused on bibliographic structure.
 
@@ -75,7 +76,7 @@ For *Attention Is All You Need* with all seven entity types enabled, expect on t
 ## Guidance for the AI assistant
 
 - **Entity types are the key parameter.** The default seven cover most arXiv research-paper structure; pare down with `ENTITY_TYPES=...` if a particular pass should be narrower (e.g., authors-only pre-resolution).
-- **The format matters.** `mark.assist` works on `text/plain` and `text/markdown`. The paper resource we create is markdown — ✓.
+- **The format matters.** `mark.delegate` works on `text/plain` and `text/markdown`. The paper resource we create is markdown — ✓.
 - **The abstract is short.** Detection runs on the resource's content, which (for a vanilla `download-paper` resource) is just the title + authors + abstract. To detect entities throughout the *full* paper body, you'd need a richer ingest path — e.g., fetch the PDF, convert to markdown, upload the body as the resource. That's out of scope for this skill, which focuses on the metadata.
 - **Detection is non-deterministic.** Re-running on the same resource will produce a similar but not identical set of annotations. Currently no deduplication is performed.
-- **Timeout handling is built in.** `mark.assist` times out after 180s without progress; subscribe to the returned StreamObservable for a progress bar.
+- **Timeout handling is built in.** `mark.delegate` times out after 180s without progress; subscribe to the returned StreamObservable for a progress bar.

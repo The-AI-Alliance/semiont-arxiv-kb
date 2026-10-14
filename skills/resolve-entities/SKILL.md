@@ -16,7 +16,7 @@ This skill is the middle of the four arXiv skills. It builds on [`mark-entities`
 ## SDK verbs
 
 - `yield.resource` — create the paper resource
-- `mark.assist` — detect entity references
+- `mark.delegate` — detect entity references
 - `gather.annotation` — fetch LLM context for each unresolved reference
 - `match.search` — search the KB for candidate matches
 - `bind.body` — link the annotation to the best match
@@ -56,12 +56,12 @@ HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{p
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
-  -e SEMIONT_USER_EMAIL=admin@example.com \
-  -e SEMIONT_USER_PASSWORD=<your-password> \
   -e MATCH_THRESHOLD=30 \
   node:24-alpine \
-  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/resolve-entities/script.ts 1706.03762'
+  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/resolve-entities/script.ts 1706.03762'
 ```
+
+The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 (See [`download-paper`'s "Run it"](../download-paper/SKILL.md#run-it) for the why behind the `HOST_ADDR` probe.)
 
@@ -98,4 +98,4 @@ const stillUnresolved = annotations.filter(
 - **Semantic scoring costs inference.** `useSemanticScoring: true` adds an LLM batch-scoring pass over the top 20 candidates. Worth it for precision. Set to `false` if your inference budget is tight.
 - **The threshold is in Matcher score units, not 0-1.** It's a composite of name overlap, entity-type alignment, and (with `useSemanticScoring`) semantic similarity.
 - **Run order.** This skill runs the whole pipeline (download + mark + resolve) in one script. If you've already ingested the paper via an earlier skill, adapt the script to skip the upload step and start from `browse.annotations(rId)`.
-- **Errors should narrow.** Catch `SemiontError` broadly, or `APIError` (HTTP, with `status`) and `BusRequestError` (bus-mediated) for finer handling. See [SDK error handling](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk/docs).
+- **Errors should narrow.** Catch `SemiontError` broadly, or `APIError` (HTTP, with `status`) and `BusRequestError` (bus-mediated) for finer handling. See [SDK error handling](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/Usage.md).

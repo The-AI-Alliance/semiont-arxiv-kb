@@ -10,9 +10,9 @@ This is an arXiv-flavored Semiont knowledge base. The corpus is research papers 
 | Skill | What it does | New SDK verbs |
 |---|---|---|
 | [`download-paper`](skills/download-paper/) | Fetch a paper from arXiv, declare the KB's entity-type vocabulary, and create one resource | `frame.addEntityTypes`, `yield.resource` |
-| [`mark-entities`](skills/mark-entities/) | + auto-detect entity references for several entity types | `mark.assist` |
+| [`mark-entities`](skills/mark-entities/) | + auto-detect entity references for several entity types | `mark.delegate` |
 | [`resolve-entities`](skills/resolve-entities/) | + link each detected reference to an existing KB resource where possible | `gather.annotation`, `match.search`, `bind.body` |
-| [`paper-graph`](skills/paper-graph/) | + generate a new resource for any reference that didn't match — synthesizing a paper-graph around the central paper | `yield.fromContext` |
+| [`paper-graph`](skills/paper-graph/) | + generate a new resource for any reference that didn't match — synthesizing a paper-graph around the central paper | `yield.delegate` |
 
 The four skills are a progression: each layer composes on top of the prior one. `paper-graph` is the full pipeline.
 
@@ -95,8 +95,8 @@ Set once per environment, rarely changes:
 | Var | Purpose |
 |---|---|
 | `SEMIONT_API_URL` | Base URL of the gateway (default `http://localhost:4000`) |
-| `SEMIONT_USER_EMAIL` | Email of the authenticating user |
-| `SEMIONT_USER_PASSWORD` | Password for that user |
+
+A skill signs in by the device grant: it prints an address, and a person approves in a browser. No password passes through the script. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 Local or Codespaces alike, that's the email/password from `semiont useradd` — nothing auto-creates an account.
 
@@ -146,6 +146,6 @@ Tier-2 env vars can pre-answer tier-3 prompts (e.g., `MATCH_THRESHOLD=30` pre-an
 | Where | What |
 |---|---|
 | [`@semiont/sdk` README](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk) | The TypeScript surface — eight verbs (frame, yield, mark, match, bind, gather, browse, beckon) plus admin/auth/job. |
-| [SDK Usage docs](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk/docs) | Cache semantics, reactive model, state units, error handling. |
+| [SDK Usage docs](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/Usage.md) | Cache semantics, reactive model, state units, error handling. |
 | [Semiont protocol docs](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol) | The eight-flow framing — what each verb does and why. |
-| [Semiont protocol skills](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol/skills) | Reference skill packs (`semiont-wiki`, `semiont-comment`, `semiont-highlight`, `semiont-session`, `semiont-worker`, etc.). The skills in this repo borrow their format and patterns. |
+| [Semiont protocol skills](https://github.com/The-AI-Alliance/semiont/tree/main/docs/builder/skills) | Reference skill packs (`semiont-wiki`, `semiont-comment`, `semiont-highlight`, `semiont-session`, `semiont-worker`, etc.). The skills in this repo borrow their format and patterns. |
