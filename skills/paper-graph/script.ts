@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   console.log(`Paper: ${paper.title}`);
 
   const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const session = await SemiontSession.signInDevice({
+  const opened = await SemiontSession.signInDevice({
     kb: httpKb({
       id: 'arxiv-paper-graph',
       label: 'arxiv paper-graph',
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
       if (!verificationUriComplete) console.error(`Code: ${userCode}`);
     },
   });
-  const semiont = session.client;
+  const semiont = opened.session.client;
 
   try {
     // Step 1 — yield the central paper resource
@@ -210,7 +210,7 @@ async function main(): Promise<void> {
     );
     closeInteractive();
   } finally {
-    await session.dispose();
+    opened.dispose();
   }
 }
 
