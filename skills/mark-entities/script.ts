@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   const markdown = formatArxivPaper(paper);
 
   const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const session = await SemiontSession.signInDevice({
+  const opened = await SemiontSession.signInDevice({
     kb: httpKb({
       id: 'arxiv-mark-entities',
       label: 'arxiv mark-entities',
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
       if (!verificationUriComplete) console.error(`Code: ${userCode}`);
     },
   });
-  const semiont = session.client;
+  const semiont = opened.session.client;
 
   try {
     // Tier-3 checkpoint: confirm parameters before running mark.delegate. Lets
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
 
     closeInteractive();
   } finally {
-    await session.dispose();
+    opened.dispose();
   }
 }
 

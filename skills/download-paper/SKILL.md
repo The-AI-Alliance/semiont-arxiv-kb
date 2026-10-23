@@ -33,7 +33,7 @@ const paper = await fetchArxivPaper(process.argv[2]);
 const markdown = formatArxivPaper(paper);
 
 const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-const session = await SemiontSession.signInDevice({
+const opened = await SemiontSession.signInDevice({
   kb: httpKb({
     id: 'arxiv-download-paper',
     label: 'arxiv download-paper',
@@ -47,7 +47,7 @@ const session = await SemiontSession.signInDevice({
     if (!verificationUriComplete) console.error(`Code: ${userCode}`);
   },
 });
-const semiont = session.client;
+const semiont = opened.session.client;
 
 const { resourceId } = await semiont.yield.resource({
   name: paper.title,
@@ -57,7 +57,7 @@ const { resourceId } = await semiont.yield.resource({
   storageUri: `file://papers/arxiv-${paper.id}.md`,
 });
 
-semiont.dispose();
+opened.dispose();
 ```
 
 ## Run it
