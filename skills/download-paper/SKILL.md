@@ -12,7 +12,7 @@ Given an arXiv ID (e.g. `1706.03762`), this skill:
 
 1. Fetches the paper's metadata from the arXiv API using `fetchArxivPaper` from [`src/arxiv.ts`](../../src/arxiv.ts).
 2. Formats it as a markdown document with title, authors, abstract, and links.
-3. Uploads it to the gateway via `yield.resource(...)` from `@semiont/sdk`.
+3. Uploads it to the backend via `yield.resource(...)` from `@semiont/sdk`.
 
 The result is one new resource in the KB, tagged with the entity type `research-paper`. **No annotations are created** — for that, run [`mark-entities`](../mark-entities/) after this.
 
@@ -26,28 +26,17 @@ The result is one new resource in the KB, tagged with the entity type `research-
 The full script lives at [`script.ts`](script.ts) in this directory. Heart of it:
 
 ```typescript
-import { SemiontSession, InMemorySessionStorage, httpKb } from '@semiont/sdk';
+import { SemiontClient } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 
 const paper = await fetchArxivPaper(process.argv[2]);
 const markdown = formatArxivPaper(paper);
 
-const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-const opened = await SemiontSession.signInDevice({
-  kb: httpKb({
-    id: 'arxiv-download-paper',
-    label: 'arxiv download-paper',
-    host: gateway.hostname,
-    port: Number(gateway.port) || 4000,
-    protocol: gateway.protocol === 'https:' ? 'https' : 'http',
-  }),
-  storage: new InMemorySessionStorage(),
-  onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
-    console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
-    if (!verificationUriComplete) console.error(`Code: ${userCode}`);
-  },
+const semiont = await SemiontClient.signInHttp({
+  baseUrl: process.env.SEMIONT_API_URL ?? 'http://localhost:4000',
+  email: process.env.SEMIONT_USER_EMAIL!,
+  password: process.env.SEMIONT_USER_PASSWORD!,
 });
-const semiont = opened.session.client;
 
 const { resourceId } = await semiont.yield.resource({
   name: paper.title,
@@ -57,32 +46,32 @@ const { resourceId } = await semiont.yield.resource({
   storageUri: `file://papers/arxiv-${paper.id}.md`,
 });
 
-opened.dispose();
+semiont.dispose();
 ```
 
 ## Run it
 
-**Prerequisite: the Semiont stack is running** — see [AGENTS.md › Stack setup](../../AGENTS.md#stack-setup) for the full instructions. Typically `semiont start` then `semiont useradd --email admin@example.com --admin` from the repo root.
+**Prerequisite: the Semiont backend is running** — see [AGENTS.md › Backend setup](../../AGENTS.md#backend-setup) for the full instructions. Typically `semiont start` then `semiont useradd --email admin@example.com --admin` from the repo root.
 
-From the repo root, with the stack up:
+From the repo root, with the backend up:
 
 ```bash
 # Discover the host's bridge-gateway IP — same probe `semiont start` uses.
 # `localhost` from inside a freshly-spawned container is its own loopback,
-# not the host's; the stack lives at the bridge gateway.
+# not the host's; the backend lives at the bridge gateway.
 HOST_ADDR=$(container run --rm node:24-alpine sh -c "ip route | awk '/default/{print \$3}'" 2>/dev/null | tr -d '[:space:]')
 
 container run --rm -v "$(pwd):/work" -w /work \
   -e SEMIONT_API_URL=http://${HOST_ADDR}:4000 \
+  -e SEMIONT_USER_EMAIL=admin@example.com \
+  -e SEMIONT_USER_PASSWORD=<your-password> \
   node:24-alpine \
-  sh -c 'npm ci --no-audit --no-fund && npx tsx skills/download-paper/script.ts 1706.03762'
+  sh -c 'npm install --silent --no-fund @semiont/sdk tsx && npx tsx skills/download-paper/script.ts 1706.03762'
 ```
-
-The script prints an address: open it in a browser and approve the sign-in. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
 
 The npm install happens *inside* the throwaway container — nothing lands on your host. Substitute `docker run` or `podman run` for `container run` if those are your runtimes; the `HOST_ADDR` discovery uses the same shape against any of them.
 
-If you're already on the host shell (not in a container) and the gateway is reachable directly — e.g., a codespace port forwarded to your host with `gh codespace ports forward 4000:4000` — you can skip the discovery and run a Node directly *inside* a single container against `http://localhost:4000` by adding `--network host` (Linux Docker) or by setting `SEMIONT_API_URL=http://host.docker.internal:4000` (Docker Desktop / Podman macOS).
+If you're already on the host shell (not in a container) and the backend is reachable directly — e.g., a codespace port forwarded to your host with `gh codespace ports forward 4000:4000` — you can skip the discovery and run a Node directly *inside* a single container against `http://localhost:4000` by adding `--network host` (Linux Docker) or by setting `SEMIONT_API_URL=http://host.docker.internal:4000` (Docker Desktop / Podman macOS).
 
 ## Output
 

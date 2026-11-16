@@ -5,14 +5,14 @@ This is an arXiv-flavored Semiont knowledge base. The corpus is research papers 
 ## What's here
 
 - **`src/arxiv.ts`** — small helper module for fetching paper metadata via the arXiv API (`fetchArxivPaper`) and rendering it as markdown (`formatArxivPaper`). Reusable from any skill.
-- **`skills/`** — four ready-to-run skills, increasing in complexity. Each ships a `SKILL.md` (orientation + frontmatter for skill-aware tools like Claude Code) plus a `script.ts` that uses `@semiont/sdk` against the running stack.
+- **`skills/`** — four ready-to-run skills, increasing in complexity. Each ships a `SKILL.md` (orientation + frontmatter for skill-aware tools like Claude Code) plus a `script.ts` that uses `@semiont/sdk` against the running backend.
 
 | Skill | What it does | New SDK verbs |
 |---|---|---|
 | [`download-paper`](skills/download-paper/) | Fetch a paper from arXiv, declare the KB's entity-type vocabulary, and create one resource | `frame.addEntityTypes`, `yield.resource` |
-| [`mark-entities`](skills/mark-entities/) | + auto-detect entity references for several entity types | `mark.delegate` |
+| [`mark-entities`](skills/mark-entities/) | + auto-detect entity references for several entity types | `mark.assist` |
 | [`resolve-entities`](skills/resolve-entities/) | + link each detected reference to an existing KB resource where possible | `gather.annotation`, `match.search`, `bind.body` |
-| [`paper-graph`](skills/paper-graph/) | + generate a new resource for any reference that didn't match — synthesizing a paper-graph around the central paper | `yield.delegate` |
+| [`paper-graph`](skills/paper-graph/) | + generate a new resource for any reference that didn't match — synthesizing a paper-graph around the central paper | `yield.fromContext` |
 
 The four skills are a progression: each layer composes on top of the prior one. `paper-graph` is the full pipeline.
 
@@ -36,19 +36,19 @@ These map naturally to the structure of an AI/ML research paper: who wrote it, w
 
 ## Working in containers — do not install npm packages on the host
 
-This template assumes a containerized workflow. The stack runs in containers (`semiont start` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, or any other tooling on the host machine.
+This template assumes a containerized workflow. The backend stack runs in containers (`semiont start` brings it up); the skills run in containers too. There is **no need** to install Node, the SDK, or any other tooling on the host machine.
 
 Each skill's `SKILL.md` shows a `docker run` invocation that:
 
 1. Mounts the repo as `/work` inside a throwaway `node:24-alpine` container
 2. Installs `@semiont/sdk` and `tsx` *inside* the container
-3. Runs the skill's `script.ts` against the env-configured stack
+3. Runs the skill's `script.ts` against the env-configured backend
 
 Apple Container, Docker, and Podman all accept the same `run --rm -v ... -w ... <image> <cmd>` form. The skills show `docker run`; substitute `container run` or `podman run` as your runtime requires. (Auto-detection à la the launcher's container → docker → podman order is left to a wrapper if you want one.)
 
-## Stack setup
+## Backend setup
 
-Before running any skill, the Semiont stack (PostgreSQL, Neo4j, Qdrant, Ollama, the gateway, the archivist, the librarian, the worker pool, the smelter — and optionally Jaeger for traces) must be up. There are two paths.
+Before running any skill, the Semiont backend stack (PostgreSQL, Neo4j, Qdrant, Ollama, the API server, the worker pool, the smelter — and optionally Jaeger for traces) must be up. There are two paths.
 
 ### Local: `semiont start`
 
@@ -72,17 +72,24 @@ Flags:
 
 `--config`/`--runtime` are sticky — a bare `semiont start` repeats the last explicitly-passed values. `--help` lists everything. Follow logs with `semiont logs`; bring the stack down with `semiont stop`.
 
-Once `semiont start` reports `Gateway healthy` (and Worker/Smelter), the API is at `http://localhost:4000` and the four KB skills below can hit it.
+Once `semiont start` reports `Backend healthy` (and Worker/Smelter), the API is at `http://localhost:4000` and the four KB skills below can hit it.
 
 ### Codespaces
 
-From your machine, `semiont start --runtime codespace --repo The-AI-Alliance/semiont-arxiv-kb` creates or resumes the codespace, waits for the stack (which the codespace's own launcher runs), and forwards the KB (4000) and its Keycloak (8080), or the next free ports it prints. No account is created — make the first one; it prompts for the password:
+Open the repo in a Codespace — `post-create.sh` pulls the stack's images, `post-start.sh` brings it up. No account is created — make the first admin (it prints a random password once):
 
 ```bash
-semiont useradd --repo The-AI-Alliance/semiont-arxiv-kb --email you@example.com
+docker compose -f .semiont/compose/backend.yml exec backend \
+  semiont-useradd --email you@example.com --generate-password --admin
 ```
 
-`semiont stop --repo The-AI-Alliance/semiont-arxiv-kb` stops the codespace; add `--delete` to destroy it.
+To reach the backend from your local Semiont browser (or from another container), forward the port:
+
+```bash
+gh codespace ports forward 4000:4000
+```
+
+(If `gh` rejects this with `must have admin rights to Repository`, run `gh auth refresh -h github.com -s codespace` once.)
 
 ## Parameterization and interactivity
 
@@ -94,9 +101,9 @@ Set once per environment, rarely changes:
 
 | Var | Purpose |
 |---|---|
-| `SEMIONT_API_URL` | Base URL of the gateway (default `http://localhost:4000`) |
-
-A skill signs in by the device grant: it prints an address, and a person approves in a browser. No password passes through the script. [Signing in](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/SIGN-IN.md) has the other ways a script can sign in.
+| `SEMIONT_API_URL` | Base URL of the backend (default `http://localhost:4000`) |
+| `SEMIONT_USER_EMAIL` | Email of the authenticating user |
+| `SEMIONT_USER_PASSWORD` | Password for that user |
 
 Local or Codespaces alike, that's the email/password from `semiont useradd` — nothing auto-creates an account.
 
@@ -146,6 +153,6 @@ Tier-2 env vars can pre-answer tier-3 prompts (e.g., `MATCH_THRESHOLD=30` pre-an
 | Where | What |
 |---|---|
 | [`@semiont/sdk` README](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk) | The TypeScript surface — eight verbs (frame, yield, mark, match, bind, gather, browse, beckon) plus admin/auth/job. |
-| [SDK Usage docs](https://github.com/The-AI-Alliance/semiont/blob/main/docs/builder/Usage.md) | Cache semantics, reactive model, state units, error handling. |
+| [SDK Usage docs](https://github.com/The-AI-Alliance/semiont/tree/main/packages/sdk/docs) | Cache semantics, reactive model, state units, error handling. |
 | [Semiont protocol docs](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol) | The eight-flow framing — what each verb does and why. |
-| [Semiont protocol skills](https://github.com/The-AI-Alliance/semiont/tree/main/docs/builder/skills) | Reference skill packs (`semiont-wiki`, `semiont-comment`, `semiont-highlight`, `semiont-session`, `semiont-worker`, etc.). The skills in this repo borrow their format and patterns. |
+| [Semiont protocol skills](https://github.com/The-AI-Alliance/semiont/tree/main/docs/protocol/skills) | Reference skill packs (`semiont-wiki`, `semiont-comment`, `semiont-highlight`, `semiont-session`, `semiont-worker`, etc.). The skills in this repo borrow their format and patterns. |

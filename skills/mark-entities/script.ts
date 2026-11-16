@@ -1,7 +1,7 @@
 /**
  * mark-entities — download a paper, then auto-detect entity references.
  *
- * Combines `download-paper` with `mark.delegate` for the seven arXiv-typical
+ * Combines `download-paper` with `mark.assist` for the seven arXiv-typical
  * entity types (Author, CitedPaper, Method, Dataset, Benchmark, Concept,
  * Affiliation). Detected references are stored as unresolved `linking`
  * annotations — they have entity types but are not yet bound to specific
@@ -10,9 +10,10 @@
  * Usage: tsx skills/mark-entities/script.ts <arxiv-id>
  */
 
-import { SemiontSession, InMemorySessionStorage, httpKb, entityType } from '@semiont/sdk';
+import { SemiontSession, InMemorySessionStorage, type KbTarget, entityType } from '@semiont/sdk';
 import { fetchArxivPaper, formatArxivPaper } from '../../src/arxiv.js';
 import { confirm, close as closeInteractive } from '../../src/interactive.js';
+import { createdCount } from '../../src/mark-result.js';
 
 const ENTITY_TYPES = (
   process.env.ENTITY_TYPES ??
@@ -34,28 +35,24 @@ async function main(): Promise<void> {
 
   const markdown = formatArxivPaper(paper);
 
-  const gateway = new URL(process.env.SEMIONT_API_URL ?? 'http://localhost:4000');
-  const opened = await SemiontSession.signInDevice({
-    kb: httpKb({
-      id: 'arxiv-mark-entities',
-      label: 'arxiv mark-entities',
-      host: gateway.hostname,
-      port: Number(gateway.port) || 4000,
-      protocol: gateway.protocol === 'https:' ? 'https' : 'http',
-    }),
-    storage: new InMemorySessionStorage(),
-    onCode: ({ verificationUri, verificationUriComplete, userCode }) => {
-      console.error(`Approve this script at ${verificationUriComplete ?? verificationUri}`);
-      if (!verificationUriComplete) console.error(`Code: ${userCode}`);
-    },
-  });
-  const semiont = opened.session.client;
+  const baseUrl = process.env.SEMIONT_API_URL ?? 'http://localhost:4000';
+  const email = process.env.SEMIONT_USER_EMAIL!;
+  const password = process.env.SEMIONT_USER_PASSWORD!;
+  const u = new URL(baseUrl);
+  const kb: KbTarget = {
+    id: 'arxiv-mark-entities',
+    label: 'arxiv mark-entities',
+    email,
+    endpoint: { kind: 'http', host: u.hostname, port: Number(u.port) || 4000, protocol: u.protocol.replace(':', '') as 'http' | 'https' },
+  };
+  const session = await SemiontSession.signInHttp({ kb, storage: new InMemorySessionStorage(), baseUrl, email, password });
+  const semiont = session.client;
 
   try {
-    // Tier-3 checkpoint: confirm parameters before running mark.delegate. Lets
+    // Tier-3 checkpoint: confirm parameters before running mark.assist. Lets
     // the user catch a bad ENTITY_TYPES override before paying for detection.
     const proceedDetection = await confirm(
-      `About to upload paper and run mark.delegate with ${ENTITY_TYPES.length} entity types: [${ENTITY_TYPES.join(', ')}]. Proceed?`,
+      `About to upload paper and run mark.assist with ${ENTITY_TYPES.length} entity types: [${ENTITY_TYPES.join(', ')}]. Proceed?`,
       true,
     );
     if (!proceedDetection) {
@@ -64,7 +61,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    console.log('Uploading to gateway...');
+    console.log('Uploading to backend...');
     const { resourceId: rId } = await semiont.yield.resource({
       name: paper.title,
       file: Buffer.from(markdown, 'utf-8'),
@@ -74,15 +71,14 @@ async function main(): Promise<void> {
     });
 
     console.log(`Detecting entity references for ${ENTITY_TYPES.length} types...`);
-    // `mark.delegate` with motivation 'linking' creates unresolved-reference
+    // `mark.assist` with motivation 'linking' creates unresolved-reference
     // annotations — spans tagged with entity types, ready to be resolved later.
-    const done = await semiont.mark.delegate(rId, {
-      motivation: 'linking',
+    const progress = await semiont.mark.assist(rId, 'linking', {
       entityTypes: ENTITY_TYPES,
     });
 
     console.log(
-      `Created ${done.result && 'persisted' in done.result ? done.result.persisted : 0} unresolved references on ${rId}`,
+      `Created ${createdCount(progress)} unresolved references on ${rId}`,
     );
 
     // Tier-3 informational: surface what was detected so the user can see what
@@ -112,7 +108,7 @@ async function main(): Promise<void> {
 
     closeInteractive();
   } finally {
-    opened.dispose();
+    await session.dispose();
   }
 }
 
